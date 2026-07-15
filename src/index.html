@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Read the contents of a local Minecraft or Prism Launcher directory."
+    />
+    <title>SMP Client</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <p class="eyebrow">SMP client</p>
+        <h1>Read a Minecraft directory</h1>
+        <p class="intro">
+          Choose a local directory to see the files the browser can read. No
+          files are uploaded or changed.
+        </p>
+      </header>
+
+      <section
+        id="directory-picker"
+        class="picker"
+        aria-labelledby="picker-heading"
+      >
+        <div>
+          <h2 id="picker-heading">Directory access</h2>
+          <p id="support-message"></p>
+          <p class="drop-hint">You can also drag and drop a folder here.</p>
+        </div>
+        <button id="choose-directory" type="button">Choose directory</button>
+        <input
+          id="directory-input"
+          type="file"
+          webkitdirectory
+          multiple
+          hidden
+        />
+      </section>
+
+      <p id="status" class="status" role="status" aria-live="polite">
+        No directory selected.
+      </p>
+
+      <section id="results" class="results" hidden aria-labelledby="results-heading">
+        <div class="results-heading">
+          <div>
+            <p class="eyebrow">Selected directory</p>
+            <h2 id="results-heading"></h2>
+          </div>
+          <dl class="summary">
+            <div>
+              <dt>Files</dt>
+              <dd id="file-count">0</dd>
+            </div>
+            <div>
+              <dt>Total size</dt>
+              <dd id="total-size">0 B</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Path</th>
+                <th scope="col">Size</th>
+                <th scope="col">Modified</th>
+              </tr>
+            </thead>
+            <tbody id="file-list"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
