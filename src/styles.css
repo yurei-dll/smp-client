@@ -374,6 +374,172 @@ tbody tr:last-child td {
   font-size: 0.78rem;
 }
 
+.actions-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border-top: 1px solid #294234;
+  background: #14251b;
+}
+
+.apply-button,
+.guide-button,
+.download-button {
+  padding: 0.42rem 0.7rem;
+  border: 1px solid #5fb77c;
+  border-radius: 0.45rem;
+  color: #c9f5d7;
+  background: #173522;
+  font-size: 0.75rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.apply-button:hover:not(:disabled),
+.guide-button:hover:not(:disabled),
+.download-button:hover:not(:disabled) {
+  background: #214a30;
+}
+
+.apply-button:disabled,
+.guide-button:disabled,
+.download-button:disabled {
+  cursor: not-allowed;
+}
+
+.guide-button {
+  color: #d8e4dc;
+  border-color: #496052;
+  background: #1a2b21;
+}
+
+.guide-modal {
+  width: min(54rem, calc(100% - 2rem));
+  max-height: calc(100vh - 2rem);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #4b7259;
+  border-radius: 0.7rem;
+  color: #ecf4ee;
+  background: #101d16;
+}
+
+.guide-modal::backdrop {
+  background: rgb(4 10 6 / 75%);
+}
+
+.guide-heading,
+.guide-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.8rem;
+  background: #14251b;
+}
+
+.guide-heading {
+  border-bottom: 1px solid #294234;
+}
+
+.guide-footer {
+  justify-content: flex-end;
+  border-top: 1px solid #294234;
+}
+
+.modal-close {
+  padding: 0.1rem 0.45rem;
+  border: 0;
+  color: #aebdb3;
+  background: transparent;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  color: #fff;
+}
+
+.guide-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.55rem 0.8rem 0;
+  border-bottom: 1px solid #294234;
+}
+
+.guide-tab {
+  margin-bottom: -1px;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid transparent;
+  border-bottom-color: #294234;
+  border-radius: 0.4rem 0.4rem 0 0;
+  color: #9cac9f;
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.guide-tab[aria-selected="true"] {
+  border-color: #294234;
+  border-bottom-color: #101d16;
+  color: #c9f5d7;
+  background: #101d16;
+}
+
+.guide-content {
+  max-height: min(60vh, 38rem);
+  padding: 0.8rem;
+  overflow: auto;
+}
+
+.guide-intro,
+.guide-message {
+  margin-bottom: 0.75rem;
+  color: #aebdb3;
+  font-size: 0.8rem;
+}
+
+.guide-error {
+  color: #ffaaa1;
+}
+
+.guide-command-list {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0;
+  padding-left: 1.5rem;
+}
+
+.guide-command-list li {
+  padding-left: 0.2rem;
+}
+
+.guide-command-list strong,
+.guide-command-list code {
+  display: block;
+}
+
+.guide-command-list strong {
+  margin-bottom: 0.3rem;
+  font-size: 0.78rem;
+}
+
+.guide-command-list code {
+  padding: 0.55rem;
+  overflow-x: auto;
+  border: 1px solid #294234;
+  border-radius: 0.35rem;
+  color: #d8e4dc;
+  background: #0b1510;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .drop-overlay {
   position: fixed;
   inset: 0.75rem;

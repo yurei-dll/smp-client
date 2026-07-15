@@ -11,6 +11,13 @@ const fileList = document.querySelector("#file-list");
 const proposedActions = document.querySelector("#proposed-actions");
 const actionCount = document.querySelector("#action-count");
 const actionList = document.querySelector("#action-list");
+const openGuideButton = document.querySelector("#open-guide");
+const applyActionsButton = document.querySelector("#apply-actions");
+const applyGuide = document.querySelector("#apply-guide");
+const closeGuideButton = document.querySelector("#close-guide");
+const guideTabs = document.querySelector("#guide-tabs");
+const guideContent = document.querySelector("#guide-content");
+const downloadScriptButton = document.querySelector("#download-script");
 
 const supportsDirectoryHandles = "showDirectoryPicker" in window;
 const catalogUrls = [
@@ -20,8 +27,11 @@ const catalogUrls = [
 
 let manifestPromise;
 let displayedFiles = [];
+let displayedActions = [];
 let collapsedGroups = new Set();
 let initializedGroups = new Set();
+let guideOperatingSystem = detectOperatingSystem();
+let guideActions = [];
 
 supportMessage.textContent = supportsDirectoryHandles
   ? "This browser can read a directory directly after you grant access."
@@ -73,6 +83,15 @@ directoryPicker.addEventListener("dragenter", handleDragEnter);
 directoryPicker.addEventListener("dragover", handleDragOver);
 directoryPicker.addEventListener("dragleave", handleDragLeave);
 directoryPicker.addEventListener("drop", handleDrop);
+actionList.addEventListener("change", updateApplyActionsButton);
+openGuideButton.addEventListener("click", openApplyGuide);
+closeGuideButton.addEventListener("click", () => applyGuide.close());
+applyGuide.addEventListener("click", (event) => {
+  if (event.target === applyGuide) {
+    applyGuide.close();
+  }
+});
+downloadScriptButton.addEventListener("click", downloadGuideScript);
 
 let dragDepth = 0;
 
@@ -287,6 +306,9 @@ function beginRead(directoryName) {
   results.hidden = true;
   manifestNote.hidden = true;
   proposedActions.hidden = true;
+  displayedActions = [];
+  openGuideButton.disabled = true;
+  applyActionsButton.disabled = true;
   collapsedGroups = new Set();
   initializedGroups = new Set();
   status.classList.remove("error");
@@ -347,6 +369,8 @@ async function loadManifest() {
       manifest.set(item.filename.toLowerCase(), {
         filename: item.filename,
         sha512: hash.toLowerCase(),
+        source: item.source,
+        versionId: item.platform_version_id,
       });
     }
     return manifest;
@@ -358,13 +382,14 @@ async function loadManifest() {
 async function compareFile(file, manifest) {
   const filename = file.path.split("/").at(-1).toLowerCase();
   const expectedFile = manifest.get(filename);
+  const actualHash = await sha512(file.file);
+  file.sha512 = actualHash;
 
   if (!expectedFile) {
     file.manifestStatus = "not-in-manifest";
     return;
   }
 
-  const actualHash = await sha512(file.file);
   file.manifestStatus =
     actualHash === expectedFile.sha512 ? "current" : "hash-mismatch";
 }
@@ -382,17 +407,25 @@ function buildProposedActions(modFiles, manifest) {
         path: expectedFile.filename,
         title: `Install ${expectedFile.filename}`,
         detail: "This full-client manifest JAR is missing.",
+        sha512: expectedFile.sha512,
+        source: expectedFile.source,
+        versionId: expectedFile.versionId,
       });
     }
   }
 
   for (const file of modFiles) {
     if (file.manifestStatus === "hash-mismatch") {
+      const expectedFile = manifest.get(file.path.split("/").at(-1).toLowerCase());
       actions.push({
         kind: "replace",
         path: file.path,
         title: `Replace ${file.path}`,
         detail: "The filename matches the manifest, but its SHA-512 does not.",
+        expectedSha512: file.sha512,
+        sha512: expectedFile.sha512,
+        source: expectedFile.source,
+        versionId: expectedFile.versionId,
       });
     } else if (file.manifestStatus === "not-in-manifest") {
       actions.push({
@@ -400,6 +433,7 @@ function buildProposedActions(modFiles, manifest) {
         path: file.path,
         title: `Archive ${file.path}`,
         detail: "This local JAR is not in the full-client manifest. It may be a user-installed mod.",
+        expectedSha512: file.sha512,
       });
     }
   }
@@ -446,6 +480,7 @@ function showResults(directoryName, files, manifestLoaded, actions) {
 }
 
 function renderActions(actions) {
+  displayedActions = actions;
   actionList.replaceChildren();
   actionCount.textContent = `${actions.length.toLocaleString()} action${actions.length === 1 ? "" : "s"}`;
 
@@ -463,6 +498,21 @@ function renderActions(actions) {
   }
 
   proposedActions.hidden = false;
+  updateApplyActionsButton();
+}
+
+function updateApplyActionsButton() {
+  const hasSelectedAction = actionList.querySelector(
+    'input[name="proposed-action"]:checked',
+  );
+  applyActionsButton.disabled = !supportsDirectoryHandles || !hasSelectedAction;
+  openGuideButton.disabled = !hasSelectedAction;
+  openGuideButton.title = hasSelectedAction ? "" : "Select at least one proposed action.";
+  applyActionsButton.title = supportsDirectoryHandles
+    ? hasSelectedAction
+      ? ""
+      : "Select at least one proposed action."
+    : "Applying changes directly is not supported by this browser.";
 }
 
 function createActionItem(action, index) {
@@ -479,6 +529,7 @@ function createActionItem(action, index) {
   checkbox.name = "proposed-action";
   checkbox.value = `${action.kind}:${action.path}`;
   checkbox.id = `proposed-action-${index}`;
+  checkbox.dataset.actionIndex = index;
   checkbox.checked = false;
 
   body.className = "action-body";
@@ -493,6 +544,288 @@ function createActionItem(action, index) {
   label.append(checkbox, body, kind);
   item.append(label);
   return item;
+}
+
+function detectOperatingSystem() {
+  const platform = navigator.userAgentData?.platform ?? navigator.platform ?? "";
+  return /win/i.test(platform) ? "windows" : "linux";
+}
+
+async function openApplyGuide() {
+  const selectedIndexes = Array.from(
+    actionList.querySelectorAll('input[name="proposed-action"]:checked'),
+    (checkbox) => Number(checkbox.dataset.actionIndex),
+  );
+  const selectedActions = selectedIndexes.map((index) => displayedActions[index]);
+  if (selectedActions.length === 0) {
+    return;
+  }
+
+  guideActions = [];
+  renderGuideTabs();
+  guideContent.replaceChildren(createGuideMessage("Resolving download information…"));
+  downloadScriptButton.disabled = true;
+  applyGuide.showModal();
+
+  try {
+    guideActions = await Promise.all(selectedActions.map(resolveActionDownload));
+    renderGuide();
+    downloadScriptButton.disabled = false;
+  } catch (error) {
+    console.error(error);
+    guideContent.replaceChildren(
+      createGuideMessage(`Could not prepare the guide: ${error.message ?? "unknown error"}`, true),
+    );
+  }
+}
+
+async function resolveActionDownload(action) {
+  if (action.kind === "archive") {
+    return action;
+  }
+  if (action.source !== "modrinth" || !action.versionId) {
+    throw new Error(`No supported download source is available for ${action.path}.`);
+  }
+
+  const response = await fetch(
+    `https://api.modrinth.com/v2/version/${encodeURIComponent(action.versionId)}`,
+  );
+  if (!response.ok) {
+    throw new Error(`Modrinth returned HTTP ${response.status} for ${action.path}.`);
+  }
+  const version = await response.json();
+  const file = version.files?.find(
+    (candidate) =>
+      candidate.filename === action.path &&
+      candidate.hashes?.sha512?.toLowerCase() === action.sha512,
+  );
+  if (!file?.url) {
+    throw new Error(`Modrinth did not return the catalog-matched file for ${action.path}.`);
+  }
+  return { ...action, downloadUrl: file.url };
+}
+
+function renderGuideTabs() {
+  const operatingSystems = [
+    guideOperatingSystem,
+    guideOperatingSystem === "windows" ? "linux" : "windows",
+  ];
+  const fragment = document.createDocumentFragment();
+  for (const operatingSystem of operatingSystems) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.role = "tab";
+    button.className = "guide-tab";
+    button.textContent = operatingSystem === "windows" ? "Windows" : "Linux";
+    button.setAttribute("aria-selected", String(operatingSystem === guideOperatingSystem));
+    button.addEventListener("click", () => {
+      guideOperatingSystem = operatingSystem;
+      renderGuideTabs();
+      if (guideActions.length > 0) {
+        renderGuide();
+      }
+    });
+    fragment.append(button);
+  }
+  guideTabs.replaceChildren(fragment);
+}
+
+function renderGuide() {
+  const intro = document.createElement("p");
+  intro.className = "guide-intro";
+  intro.textContent =
+    guideOperatingSystem === "windows"
+      ? "Open PowerShell in your mods folder, then run each selected command."
+      : "Open a terminal in your mods folder, then run each selected command.";
+
+  const list = document.createElement("ol");
+  list.className = "guide-command-list";
+  for (const action of guideActions) {
+    const item = document.createElement("li");
+    const title = document.createElement("strong");
+    const command = document.createElement("code");
+    title.textContent = action.title;
+    command.textContent = manualCommand(action, guideOperatingSystem);
+    item.append(title, command);
+    list.append(item);
+  }
+  guideContent.replaceChildren(intro, list);
+  downloadScriptButton.textContent = `Download generated ${
+    guideOperatingSystem === "windows" ? "PowerShell" : "shell"
+  } script`;
+}
+
+function createGuideMessage(message, isError = false) {
+  const paragraph = document.createElement("p");
+  paragraph.className = isError ? "guide-message guide-error" : "guide-message";
+  paragraph.textContent = message;
+  return paragraph;
+}
+
+function manualCommand(action, operatingSystem) {
+  if (operatingSystem === "windows") {
+    const path = quotePowerShell(action.path);
+    const backup = quotePowerShell(`.smp-client\\backup\\manual\\${action.path}`);
+    const verifyExisting = action.expectedSha512
+      ? `if ((Get-FileHash -Algorithm SHA512 -LiteralPath ${path}).Hash.ToLower() -ne '${action.expectedSha512}') { throw 'File changed since scan' }; `
+      : `if (Test-Path -LiteralPath ${path}) { throw 'Destination now exists' }; `;
+    if (action.kind === "archive") {
+      return `${verifyExisting}New-Item -ItemType Directory -Force (Split-Path ${backup}) | Out-Null; Move-Item -LiteralPath ${path} -Destination ${backup}`;
+    }
+    const url = quotePowerShell(action.downloadUrl);
+    const staged = quotePowerShell(`${action.path}.download`);
+    const verify = `if ((Get-FileHash -Algorithm SHA512 -LiteralPath ${staged}).Hash.ToLower() -ne '${action.sha512}') { Remove-Item -LiteralPath ${staged}; throw 'SHA-512 mismatch' }`;
+    const archive =
+      action.kind === "replace"
+        ? `New-Item -ItemType Directory -Force (Split-Path ${backup}) | Out-Null; Move-Item -LiteralPath ${path} -Destination ${backup}; `
+        : "";
+    return `${verifyExisting}Invoke-WebRequest -Uri ${url} -OutFile ${staged}; ${verify}; ${archive}Move-Item -LiteralPath ${staged} -Destination ${path}`;
+  }
+
+  const path = quoteShell(action.path);
+  const backup = quoteShell(`.smp-client/backup/manual/${action.path}`);
+  const verifyExisting = action.expectedSha512
+    ? `test "$(sha512sum -- ${path} | cut -d' ' -f1)" = '${action.expectedSha512}' && `
+    : `test ! -e ${path} && `;
+  if (action.kind === "archive") {
+    return `${verifyExisting}mkdir -p "$(dirname ${backup})" && mv -- ${path} ${backup}`;
+  }
+  const staged = quoteShell(`${action.path}.download`);
+  const archive =
+    action.kind === "replace"
+      ? `mkdir -p "$(dirname ${backup})" && mv -- ${path} ${backup} && `
+      : "";
+  return `${verifyExisting}curl -fL ${quoteShell(action.downloadUrl)} -o ${staged} && test "$(sha512sum -- ${staged} | cut -d' ' -f1)" = '${action.sha512}' && ${archive}mv -- ${staged} ${path}`;
+}
+
+function downloadGuideScript() {
+  const windows = guideOperatingSystem === "windows";
+  const contents = windows ? createPowerShellScript(guideActions) : createShellScript(guideActions);
+  const blobUrl = URL.createObjectURL(
+    new Blob([contents], { type: windows ? "text/plain" : "text/x-shellscript" }),
+  );
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = windows ? "apply-smp-changes.ps1" : "apply-smp-changes.sh";
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  setTimeout(() => {
+    link.remove();
+    URL.revokeObjectURL(blobUrl);
+  }, 0);
+}
+
+function createShellScript(actions) {
+  const lines = [
+    "#!/usr/bin/env bash",
+    "set -euo pipefail",
+    "MODS_DIR=${1:-}",
+    'if [[ -z "$MODS_DIR" ]]; then read -r -p "Path to mods folder: " MODS_DIR; fi',
+    'cd -- "$MODS_DIR"',
+    'BACKUP=".smp-client/backup/$(date +%Y%m%d-%H%M%S)"',
+    'STAGE=".smp-client/stage-$$"',
+    'mkdir -p "$BACKUP" "$STAGE"',
+    "cleanup() { rm -rf -- \"$STAGE\"; }",
+    "trap cleanup EXIT",
+    'verify_hash() { local path=$1 expected=$2 actual; actual=$(sha512sum -- "$path" | cut -d\' \' -f1); [[ "$actual" == "$expected" ]] || { echo "SHA-512 mismatch: $path" >&2; exit 1; }; }',
+  ];
+  for (const [index, action] of actions.entries()) {
+    const path = quoteShell(action.path);
+    const backupPath = `\"$BACKUP/${escapeDoubleQuotedShell(action.path)}\"`;
+    if (action.kind === "archive") {
+      lines.push(
+        `test -f ${path} || { echo "Missing ${escapeDoubleQuotedShell(action.path)}" >&2; exit 1; }`,
+        `verify_hash ${path} '${action.expectedSha512}'`,
+        `mkdir -p \"$(dirname ${backupPath})\"`,
+        `mv -- ${path} ${backupPath}`,
+      );
+      continue;
+    }
+    const staged = `\"$STAGE/${index}.jar\"`;
+    if (action.kind === "install") {
+      lines.push(`test ! -e ${path} || { echo "Destination now exists: ${escapeDoubleQuotedShell(action.path)}" >&2; exit 1; }`);
+    }
+    lines.push(
+      `curl -fL ${quoteShell(action.downloadUrl)} -o ${staged}`,
+      `verify_hash ${staged} '${action.sha512}'`,
+    );
+    if (action.kind === "replace") {
+      lines.push(
+        `verify_hash ${path} '${action.expectedSha512}'`,
+        `mkdir -p \"$(dirname ${backupPath})\"`,
+        `mv -- ${path} ${backupPath}`,
+      );
+    }
+    lines.push(`mv -- ${staged} ${path}`);
+  }
+  lines.push('echo "Selected SMP changes applied. Backup: $BACKUP"', "");
+  return lines.join("\n");
+}
+
+function createPowerShellScript(actions) {
+  const lines = [
+    "param([Parameter(Position=0)][string]$ModsDir)",
+    "$ErrorActionPreference = 'Stop'",
+    "if (-not $ModsDir) { $ModsDir = Read-Host 'Path to mods folder' }",
+    "Set-Location -LiteralPath $ModsDir",
+    "$Backup = Join-Path '.smp-client\\backup' (Get-Date -Format 'yyyyMMdd-HHmmss')",
+    "$Stage = Join-Path '.smp-client' ('stage-' + $PID)",
+    "New-Item -ItemType Directory -Force $Backup, $Stage | Out-Null",
+    "try {",
+  ];
+  for (const [index, action] of actions.entries()) {
+    const path = quotePowerShell(action.path);
+    const backup = `$Backup + ${quotePowerShell(`\\${action.path}`)}`;
+    if (action.kind === "archive") {
+      lines.push(
+        `  if ((Get-FileHash -Algorithm SHA512 -LiteralPath ${path}).Hash.ToLower() -ne '${action.expectedSha512}') { throw 'Changed since scan: ${escapePowerShell(action.path)}' }`,
+        `  New-Item -ItemType Directory -Force (Split-Path (${backup})) | Out-Null`,
+        `  Move-Item -LiteralPath ${path} -Destination (${backup})`,
+      );
+      continue;
+    }
+    const staged = `$Stage + '\\${index}.jar'`;
+    if (action.kind === "install") {
+      lines.push(`  if (Test-Path -LiteralPath ${path}) { throw 'Destination now exists: ${escapePowerShell(action.path)}' }`);
+    }
+    lines.push(
+      `  Invoke-WebRequest -Uri ${quotePowerShell(action.downloadUrl)} -OutFile (${staged})`,
+      `  if ((Get-FileHash -Algorithm SHA512 -LiteralPath (${staged})).Hash.ToLower() -ne '${action.sha512}') { throw 'SHA-512 mismatch: ${escapePowerShell(action.path)}' }`,
+    );
+    if (action.kind === "replace") {
+      lines.push(
+        `  if ((Get-FileHash -Algorithm SHA512 -LiteralPath ${path}).Hash.ToLower() -ne '${action.expectedSha512}') { throw 'Changed since scan: ${escapePowerShell(action.path)}' }`,
+        `  New-Item -ItemType Directory -Force (Split-Path (${backup})) | Out-Null`,
+        `  Move-Item -LiteralPath ${path} -Destination (${backup})`,
+      );
+    }
+    lines.push(`  Move-Item -LiteralPath (${staged}) -Destination ${path}`);
+  }
+  lines.push(
+    "  Write-Host \"Selected SMP changes applied. Backup: $Backup\"",
+    "} finally {",
+    "  Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $Stage",
+    "}",
+    "",
+  );
+  return lines.join("\r\n");
+}
+
+function quoteShell(value) {
+  return `'${String(value).replaceAll("'", `'\"'\"'`)}'`;
+}
+
+function escapeDoubleQuotedShell(value) {
+  return String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("$", "\\$");
+}
+
+function quotePowerShell(value) {
+  return `'${escapePowerShell(value)}'`;
+}
+
+function escapePowerShell(value) {
+  return String(value).replaceAll("'", "''");
 }
 
 function renderFiles(files) {

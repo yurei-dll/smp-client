@@ -14,7 +14,9 @@ compares mod JARs with the current `core` and `client-optional` catalogs from
 `smp`. Selecting `mods`, `.minecraft`, or a parent Prism instance produces the
 same focused `mods` view. After comparison it proposes missing installs, hash
 replacements, and optional archival of unrecognized JARs; every proposed action
-is unchecked and review-only. It does not write to the directory.
+is unchecked by default. Checked actions can be opened in an OS-specific manual
+guide or exported as a generated Bash or PowerShell script. The website itself
+does not write to the directory.
 
 Serve the repository over localhost and open the printed URL:
 
