@@ -10,29 +10,20 @@
     <title>SMP Client</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body id="directory-picker">
     <main class="shell">
-      <header>
-        <p class="eyebrow">SMP client</p>
-        <h1>Read a Minecraft directory</h1>
-        <p class="intro">
-          Choose your <code>mods</code> folder, <code>.minecraft</code>, or a
-          parent Prism instance to compare its mods with the current SMP
-          full-client catalog. No files are uploaded or changed.
-        </p>
-      </header>
-
-      <section
-        id="directory-picker"
-        class="picker"
-        aria-labelledby="picker-heading"
-      >
-        <div>
-          <h2 id="picker-heading">Directory access</h2>
-          <p id="support-message"></p>
-          <p class="drop-hint">You can also drag and drop a folder here.</p>
+      <header class="topbar">
+        <div class="brand">
+          <p class="eyebrow">SMP client</p>
+          <h1>Mod folder check</h1>
+          <p class="intro">
+            Drop <code>mods</code>, <code>.minecraft</code>, or a Prism instance
+            anywhere on this page. Nothing is uploaded or changed.
+          </p>
         </div>
-        <button id="choose-directory" type="button">Choose directory</button>
+        <button id="choose-directory" class="choose-button" type="button">
+          Choose folder
+        </button>
         <input
           id="directory-input"
           type="file"
@@ -40,50 +31,65 @@
           multiple
           hidden
         />
-      </section>
+      </header>
 
-      <p id="status" class="status" role="status" aria-live="polite">
-        No directory selected.
-      </p>
+      <div class="status-line">
+        <p id="status" class="status" role="status" aria-live="polite">
+          No directory selected.
+        </p>
+        <p id="support-message" class="support-message"></p>
+      </div>
 
       <p id="manifest-note" class="manifest-note" hidden>
         Comparison target: <strong>SMP Client Full</strong> (<code>core</code>
         + <code>client-optional</code> from the current <code>smp</code> catalog).
       </p>
 
-      <section id="results" class="results" hidden aria-labelledby="results-heading">
-        <div class="results-heading">
-          <div>
-            <p class="eyebrow">Selected directory</p>
-            <h2 id="results-heading"></h2>
+      <div class="workspace">
+        <section id="results" class="panel results" hidden aria-labelledby="results-heading">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Selected directory</p>
+              <h2 id="results-heading"></h2>
+            </div>
+            <p class="panel-count"><span id="file-count">0</span> files</p>
           </div>
-          <dl class="summary">
-            <div>
-              <dt>Files</dt>
-              <dd id="file-count">0</dd>
-            </div>
-            <div>
-              <dt>Total size</dt>
-              <dd id="total-size">0 B</dd>
-            </div>
-          </dl>
-        </div>
 
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Path</th>
-                <th scope="col">Manifest</th>
-                <th scope="col">Size</th>
-                <th scope="col">Modified</th>
-              </tr>
-            </thead>
-            <tbody id="file-list"></tbody>
-          </table>
-        </div>
-      </section>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Path</th>
+                  <th scope="col">Manifest</th>
+                </tr>
+              </thead>
+              <tbody id="file-list"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section
+          id="proposed-actions"
+          class="panel proposed-actions"
+          hidden
+          aria-labelledby="actions-heading"
+        >
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Review only</p>
+              <h2 id="actions-heading">Proposed actions</h2>
+            </div>
+            <p id="action-count" class="panel-count"></p>
+          </div>
+          <p class="actions-note">
+            Unchecked by default. Selecting an action still changes nothing.
+          </p>
+          <ul id="action-list" class="action-list"></ul>
+        </section>
+      </div>
     </main>
+
+    <div class="drop-overlay" aria-hidden="true">Drop folder to scan</div>
 
     <script type="module" src="app.js"></script>
   </body>

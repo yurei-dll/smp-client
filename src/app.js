@@ -7,8 +7,10 @@ const manifestNote = document.querySelector("#manifest-note");
 const results = document.querySelector("#results");
 const resultsHeading = document.querySelector("#results-heading");
 const fileCount = document.querySelector("#file-count");
-const totalSize = document.querySelector("#total-size");
 const fileList = document.querySelector("#file-list");
+const proposedActions = document.querySelector("#proposed-actions");
+const actionCount = document.querySelector("#action-count");
+const actionList = document.querySelector("#action-list");
 
 const supportsDirectoryHandles = "showDirectoryPicker" in window;
 const catalogUrls = [
@@ -258,6 +260,7 @@ function beginRead(directoryName) {
   chooseButton.disabled = true;
   results.hidden = true;
   manifestNote.hidden = true;
+  proposedActions.hidden = true;
   collapsedGroups = new Set();
   initializedGroups = new Set();
   status.classList.remove("error");
@@ -279,7 +282,8 @@ async function compareAndShow(directoryName, files) {
       file.manifestStatus ??= "not-a-mod";
     }
 
-    showResults(directoryName, files, true);
+    const actions = buildProposedActions(modFiles, manifest);
+    showResults(directoryName, files, true, actions);
   } catch (error) {
     manifestPromise = undefined;
     console.error(error);
@@ -288,7 +292,7 @@ async function compareAndShow(directoryName, files) {
         ? "unavailable"
         : "not-a-mod";
     }
-    showResults(directoryName, files, false);
+    showResults(directoryName, files, false, []);
     status.classList.add("error");
     status.textContent = `Read the directory, but could not load the manifest: ${error.message ?? "unknown error"}`;
   }
@@ -314,7 +318,10 @@ async function loadManifest() {
       if (typeof item?.filename !== "string" || typeof hash !== "string") {
         throw new Error("catalog entry is missing a filename or SHA-512 hash");
       }
-      manifest.set(item.filename.toLowerCase(), hash.toLowerCase());
+      manifest.set(item.filename.toLowerCase(), {
+        filename: item.filename,
+        sha512: hash.toLowerCase(),
+      });
     }
     return manifest;
   });
@@ -324,15 +331,58 @@ async function loadManifest() {
 
 async function compareFile(file, manifest) {
   const filename = file.path.split("/").at(-1).toLowerCase();
-  const expectedHash = manifest.get(filename);
+  const expectedFile = manifest.get(filename);
 
-  if (!expectedHash) {
+  if (!expectedFile) {
     file.manifestStatus = "not-in-manifest";
     return;
   }
 
   const actualHash = await sha512(file.file);
-  file.manifestStatus = actualHash === expectedHash ? "current" : "hash-mismatch";
+  file.manifestStatus =
+    actualHash === expectedFile.sha512 ? "current" : "hash-mismatch";
+}
+
+function buildProposedActions(modFiles, manifest) {
+  const actions = [];
+  const installedFilenames = new Set(
+    modFiles.map((file) => file.path.split("/").at(-1).toLowerCase()),
+  );
+
+  for (const expectedFile of manifest.values()) {
+    if (!installedFilenames.has(expectedFile.filename.toLowerCase())) {
+      actions.push({
+        kind: "install",
+        path: expectedFile.filename,
+        title: `Install ${expectedFile.filename}`,
+        detail: "This full-client manifest JAR is missing.",
+      });
+    }
+  }
+
+  for (const file of modFiles) {
+    if (file.manifestStatus === "hash-mismatch") {
+      actions.push({
+        kind: "replace",
+        path: file.path,
+        title: `Replace ${file.path}`,
+        detail: "The filename matches the manifest, but its SHA-512 does not.",
+      });
+    } else if (file.manifestStatus === "not-in-manifest") {
+      actions.push({
+        kind: "archive",
+        path: file.path,
+        title: `Archive ${file.path}`,
+        detail: "This local JAR is not in the full-client manifest. It may be a user-installed mod.",
+      });
+    }
+  }
+
+  const kindOrder = { install: 0, replace: 1, archive: 2 };
+  return actions.sort(
+    (left, right) =>
+      kindOrder[left.kind] - kindOrder[right.kind] || left.path.localeCompare(right.path),
+  );
 }
 
 async function sha512(file) {
@@ -348,27 +398,75 @@ function isModJar(directoryName, path) {
   }
 
   const normalizedPath = path.replaceAll("\\", "/").toLowerCase();
-  return (
-    directoryName.toLowerCase() === "mods" ||
-    normalizedPath.startsWith("mods/") ||
-    normalizedPath.includes("/mods/")
-  );
+  return directoryName.toLowerCase() === "mods" && !normalizedPath.includes("/");
 }
 
-function showResults(directoryName, files, manifestLoaded) {
+function showResults(directoryName, files, manifestLoaded, actions) {
   files.sort((left, right) => left.path.localeCompare(right.path));
 
   resultsHeading.textContent = directoryName;
   fileCount.textContent = files.length.toLocaleString();
-  totalSize.textContent = formatBytes(
-    files.reduce((sum, file) => sum + file.size, 0),
-  );
   renderFiles(files);
 
   results.hidden = false;
   manifestNote.hidden = !manifestLoaded;
+  if (manifestLoaded) {
+    renderActions(actions);
+  } else {
+    proposedActions.hidden = true;
+  }
   chooseButton.disabled = false;
   status.textContent = `Finished reading and comparing ${files.length.toLocaleString()} files.`;
+}
+
+function renderActions(actions) {
+  actionList.replaceChildren();
+  actionCount.textContent = `${actions.length.toLocaleString()} action${actions.length === 1 ? "" : "s"}`;
+
+  if (actions.length === 0) {
+    const item = document.createElement("li");
+    item.className = "no-actions";
+    item.textContent = "No corrective actions proposed.";
+    actionList.append(item);
+  } else {
+    const fragment = document.createDocumentFragment();
+    for (const [index, action] of actions.entries()) {
+      fragment.append(createActionItem(action, index));
+    }
+    actionList.append(fragment);
+  }
+
+  proposedActions.hidden = false;
+}
+
+function createActionItem(action, index) {
+  const item = document.createElement("li");
+  const label = document.createElement("label");
+  const checkbox = document.createElement("input");
+  const body = document.createElement("span");
+  const heading = document.createElement("span");
+  const detail = document.createElement("span");
+  const kind = document.createElement("span");
+
+  item.className = `action action-${action.kind}`;
+  checkbox.type = "checkbox";
+  checkbox.name = "proposed-action";
+  checkbox.value = `${action.kind}:${action.path}`;
+  checkbox.id = `proposed-action-${index}`;
+  checkbox.checked = false;
+
+  body.className = "action-body";
+  heading.className = "action-title";
+  heading.textContent = action.title;
+  detail.className = "action-detail";
+  detail.textContent = action.detail;
+  kind.className = "action-kind";
+  kind.textContent = action.kind;
+
+  body.append(heading, detail);
+  label.append(checkbox, body, kind);
+  item.append(label);
+  return item;
 }
 
 function renderFiles(files) {
@@ -475,7 +573,7 @@ function createGroupRow(label, path, depth, kind) {
   });
 
   pathCell.append(button);
-  row.append(pathCell, emptyCell(), emptyCell(), emptyCell());
+  row.append(pathCell, emptyCell());
   return row;
 }
 
@@ -483,20 +581,14 @@ function createFileRow(file, depth) {
   const row = document.createElement("tr");
   const pathCell = document.createElement("td");
   const manifestCell = document.createElement("td");
-  const sizeCell = document.createElement("td");
-  const modifiedCell = document.createElement("td");
 
   pathCell.textContent = file.path.split("/").at(-1);
   pathCell.className = "file-path tree-file";
   pathCell.style.setProperty("--depth", depth);
   pathCell.title = file.path;
   manifestCell.append(createStatusBadge(file.manifestStatus));
-  sizeCell.textContent = formatBytes(file.size);
-  modifiedCell.textContent = file.lastModified
-    ? new Date(file.lastModified).toLocaleString()
-    : "Unknown";
 
-  row.append(pathCell, manifestCell, sizeCell, modifiedCell);
+  row.append(pathCell, manifestCell);
   return row;
 }
 
@@ -562,21 +654,4 @@ function selectModsFiles(files, selectedDirectoryName) {
       file.webkitRelativePath.toLowerCase().startsWith(prefix.toLowerCase()),
     )
     .map((file) => ({ file, path: file.webkitRelativePath.slice(prefix.length) }));
-}
-
-function formatBytes(bytes) {
-  if (bytes === 0) {
-    return "0 B";
-  }
-
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const unitIndex = Math.min(
-    Math.floor(Math.log(bytes) / Math.log(1024)),
-    units.length - 1,
-  );
-  const value = bytes / 1024 ** unitIndex;
-
-  return `${value.toLocaleString(undefined, {
-    maximumFractionDigits: unitIndex === 0 ? 0 : 1,
-  })} ${units[unitIndex]}`;
 }
