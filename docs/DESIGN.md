@@ -226,7 +226,7 @@ managed-state record and actual file hashes.
 desired path absent locally                 -> install
 desired path has expected desired hash      -> current
 managed path has a different known hash     -> replace
-previously managed path no longer desired   -> archive
+previously managed path no longer desired   -> disable (`.disabled`)
 unrecognized local path                     -> preserve
 ```
 
@@ -249,11 +249,11 @@ rules:
 1. show the complete plan and obtain confirmation;
 2. download or stage new files outside their final paths;
 3. verify every staged file's cryptographic hash;
-4. recheck the expected hash of any local file to be replaced or archived;
+4. recheck the expected hash of any local file to be replaced or disabled;
 5. abort that action if the file changed since the scan;
 6. create a dated backup within a dedicated backup area;
-7. move obsolete and replaced managed files into the backup instead of
-   deleting them;
+7. rename disabled JARs by appending `.disabled`, and move replaced managed
+   files into the backup instead of deleting them;
 8. move verified staged files into place;
 9. verify the resulting managed inventory;
 10. write the managed-state record only after success; and
@@ -335,9 +335,10 @@ An illustrative action document is:
       "new_sha512": "..."
     }
   ],
-  "archive": [
+  "disable": [
     {
       "path": "minecraft/mods/retired-mod.jar",
+      "disabled_path": "minecraft/mods/retired-mod.jar.disabled",
       "expected_sha512": "..."
     }
   ]
@@ -392,14 +393,14 @@ Available release: 2026.07.18.1
 
 Add:       1 file
 Replace:   1 file
-Archive:   1 file
+Disable:   1 file
 Current: 109 files
 Preserve:  4 unknown local mods
 ```
 
-Every summary count must expand to exact paths and expected actions. Terms such
-as **archive** should be used instead of **delete** when the implementation
-moves files into a recoverable backup.
+Every summary count must expand to exact paths and expected actions. **Disable**
+means renaming the exact JAR by appending `.disabled`; it must never be presented
+as deletion.
 
 ## Security and trust
 

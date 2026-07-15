@@ -392,7 +392,7 @@ tbody tr:last-child td {
   background: #3b211e;
 }
 
-.action-archive .action-kind {
+.action-disable .action-kind {
   color: #f6d790;
   background: #332a18;
 }

@@ -16,7 +16,7 @@ compares mod JARs with the current `core` and `client` catalogs from `smp` by
 default. A header selector can instead target the core-only **Barebones pack**.
 Selecting `mods`, `.minecraft`, or a parent Prism instance produces the
 same focused `mods` view. After comparison it proposes missing installs, hash
-replacements, and optional archival of unrecognized JARs; every proposed action
+replacements, and disabling of unrecognized JARs by appending `.disabled`; every proposed action
 is unchecked by default. Checked actions can be opened in an OS-specific manual
 guide or exported as a generated Bash or PowerShell script. The website itself
 does not write to the directory.

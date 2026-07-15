@@ -441,16 +441,16 @@ function buildProposedActions(modFiles, manifest) {
       });
     } else if (file.manifestStatus === "not-in-manifest") {
       actions.push({
-        kind: "archive",
+        kind: "disable",
         path: file.path,
-        title: `Archive ${file.path}`,
-        detail: "This local JAR is not in the selected pack. It may be a user-installed mod.",
+        title: `Disable ${file.path}`,
+        detail: `Rename to ${file.path}.disabled so the mod loader ignores it.`,
         expectedSha512: file.sha512,
       });
     }
   }
 
-  const kindOrder = { install: 0, replace: 1, archive: 2 };
+  const kindOrder = { install: 0, replace: 1, disable: 2 };
   return actions.sort(
     (left, right) =>
       kindOrder[left.kind] - kindOrder[right.kind] || left.path.localeCompare(right.path),
@@ -611,7 +611,7 @@ async function openApplyGuide() {
 }
 
 async function resolveActionDownload(action) {
-  if (action.kind === "archive") {
+  if (action.kind === "disable") {
     return action;
   }
   if (action.source !== "modrinth" || !action.versionId) {
@@ -697,36 +697,38 @@ function manualCommand(action, operatingSystem) {
   if (operatingSystem === "windows") {
     const path = quotePowerShell(action.path);
     const backup = quotePowerShell(`.smp-client\\backup\\manual\\${action.path}`);
+    const disabled = quotePowerShell(`${action.path}.disabled`);
     const verifyExisting = action.expectedSha512
       ? `if ((Get-FileHash -Algorithm SHA512 -LiteralPath ${path}).Hash.ToLower() -ne '${action.expectedSha512}') { throw 'File changed since scan' }; `
       : `if (Test-Path -LiteralPath ${path}) { throw 'Destination now exists' }; `;
-    if (action.kind === "archive") {
-      return `${verifyExisting}New-Item -ItemType Directory -Force (Split-Path ${backup}) | Out-Null; Move-Item -LiteralPath ${path} -Destination ${backup}`;
+    if (action.kind === "disable") {
+      return `${verifyExisting}if (Test-Path -LiteralPath ${disabled}) { throw 'Disabled destination already exists' }; Move-Item -LiteralPath ${path} -Destination ${disabled}`;
     }
     const url = quotePowerShell(action.downloadUrl);
     const staged = quotePowerShell(`${action.path}.download`);
     const verify = `if ((Get-FileHash -Algorithm SHA512 -LiteralPath ${staged}).Hash.ToLower() -ne '${action.sha512}') { Remove-Item -LiteralPath ${staged}; throw 'SHA-512 mismatch' }`;
-    const archive =
+    const backupExisting =
       action.kind === "replace"
         ? `New-Item -ItemType Directory -Force (Split-Path ${backup}) | Out-Null; Move-Item -LiteralPath ${path} -Destination ${backup}; `
         : "";
-    return `${verifyExisting}Invoke-WebRequest -Uri ${url} -OutFile ${staged}; ${verify}; ${archive}Move-Item -LiteralPath ${staged} -Destination ${path}`;
+    return `${verifyExisting}Invoke-WebRequest -Uri ${url} -OutFile ${staged}; ${verify}; ${backupExisting}Move-Item -LiteralPath ${staged} -Destination ${path}`;
   }
 
   const path = quoteShell(action.path);
   const backup = quoteShell(`.smp-client/backup/manual/${action.path}`);
+  const disabled = quoteShell(`${action.path}.disabled`);
   const verifyExisting = action.expectedSha512
     ? `test "$(sha512sum -- ${path} | cut -d' ' -f1)" = '${action.expectedSha512}' && `
     : `test ! -e ${path} && `;
-  if (action.kind === "archive") {
-    return `${verifyExisting}mkdir -p "$(dirname ${backup})" && mv -- ${path} ${backup}`;
+  if (action.kind === "disable") {
+    return `${verifyExisting}test ! -e ${disabled} && mv -- ${path} ${disabled}`;
   }
   const staged = quoteShell(`${action.path}.download`);
-  const archive =
+  const backupExisting =
     action.kind === "replace"
       ? `mkdir -p "$(dirname ${backup})" && mv -- ${path} ${backup} && `
       : "";
-  return `${verifyExisting}curl -fL ${quoteShell(action.downloadUrl)} -o ${staged} && test "$(sha512sum -- ${staged} | cut -d' ' -f1)" = '${action.sha512}' && ${archive}mv -- ${staged} ${path}`;
+  return `${verifyExisting}curl -fL ${quoteShell(action.downloadUrl)} -o ${staged} && test "$(sha512sum -- ${staged} | cut -d' ' -f1)" = '${action.sha512}' && ${backupExisting}mv -- ${staged} ${path}`;
 }
 
 function downloadGuideScript() {
@@ -764,12 +766,13 @@ function createShellScript(actions) {
   for (const [index, action] of actions.entries()) {
     const path = quoteShell(action.path);
     const backupPath = `\"$BACKUP/${escapeDoubleQuotedShell(action.path)}\"`;
-    if (action.kind === "archive") {
+    if (action.kind === "disable") {
+      const disabledPath = quoteShell(`${action.path}.disabled`);
       lines.push(
         `test -f ${path} || { echo "Missing ${escapeDoubleQuotedShell(action.path)}" >&2; exit 1; }`,
         `verify_hash ${path} '${action.expectedSha512}'`,
-        `mkdir -p \"$(dirname ${backupPath})\"`,
-        `mv -- ${path} ${backupPath}`,
+        `test ! -e ${disabledPath} || { echo "Disabled destination already exists: ${escapeDoubleQuotedShell(action.path)}.disabled" >&2; exit 1; }`,
+        `mv -- ${path} ${disabledPath}`,
       );
       continue;
     }
@@ -808,11 +811,12 @@ function createPowerShellScript(actions) {
   for (const [index, action] of actions.entries()) {
     const path = quotePowerShell(action.path);
     const backup = `$Backup + ${quotePowerShell(`\\${action.path}`)}`;
-    if (action.kind === "archive") {
+    if (action.kind === "disable") {
+      const disabled = quotePowerShell(`${action.path}.disabled`);
       lines.push(
         `  if ((Get-FileHash -Algorithm SHA512 -LiteralPath ${path}).Hash.ToLower() -ne '${action.expectedSha512}') { throw 'Changed since scan: ${escapePowerShell(action.path)}' }`,
-        `  New-Item -ItemType Directory -Force (Split-Path (${backup})) | Out-Null`,
-        `  Move-Item -LiteralPath ${path} -Destination (${backup})`,
+        `  if (Test-Path -LiteralPath ${disabled}) { throw 'Disabled destination already exists: ${escapePowerShell(action.path)}.disabled' }`,
+        `  Move-Item -LiteralPath ${path} -Destination ${disabled}`,
       );
       continue;
     }
