@@ -103,18 +103,44 @@ async function handleDrop(event) {
   directoryPicker.classList.remove("dragging");
 
   try {
-    const entries = Array.from(event.dataTransfer?.items ?? [])
+    const items = Array.from(event.dataTransfer?.items ?? []);
+    const entries = items
       .map((item) => item.getAsEntry?.() ?? item.webkitGetAsEntry?.())
       .filter(Boolean);
 
-    if (entries.length !== 1 || !entries[0].isDirectory) {
-      throw new Error("Drop exactly one folder, not individual files.");
+    if (entries.length === 1 && entries[0].isDirectory) {
+      const modsDirectory = await findModsDirectoryEntry(entries[0]);
+      beginRead("mods");
+      const files = await readDirectoryEntry(modsDirectory);
+      await compareAndShow("mods", files);
+      return;
     }
 
-    const modsDirectory = await findModsDirectoryEntry(entries[0]);
-    beginRead("mods");
-    const files = await readDirectoryEntry(modsDirectory);
-    await compareAndShow("mods", files);
+    // This method must be called during the synchronous portion of the drop
+    // event. It is only a fallback when the widely supported Entry API did not
+    // expose a directory.
+    const handlePromises = items
+      .filter((item) => item.kind === "file" && item.getAsFileSystemHandle)
+      .map((item) => item.getAsFileSystemHandle());
+    const handles = (await Promise.all(handlePromises)).filter(Boolean);
+    if (handles.length === 1 && handles[0].kind === "directory") {
+      const modsDirectory = await findModsDirectoryHandle(handles[0]);
+      beginRead("mods");
+      const files = await readDirectoryHandle(modsDirectory);
+      await compareAndShow("mods", files);
+      return;
+    }
+
+    if (
+      (entries.length === 1 && entries[0].isFile) ||
+      (handles.length === 1 && handles[0].kind === "file")
+    ) {
+      throw new Error(
+        "The browser exposed this item as a file, so it cannot read through it as a Unix directory symlink. Drop or choose the target folder instead.",
+      );
+    }
+
+    throw new Error("Drop exactly one folder or directory symlink.");
   } catch (error) {
     handlePickerError(error);
   }
