@@ -16,8 +16,9 @@
         <p class="eyebrow">SMP client</p>
         <h1>Read a Minecraft directory</h1>
         <p class="intro">
-          Choose a local directory to see the files the browser can read. No
-          files are uploaded or changed.
+          Choose your <code>mods</code> folder, <code>.minecraft</code>, or a
+          parent Prism instance to compare its mods with the current SMP
+          full-client catalog. No files are uploaded or changed.
         </p>
       </header>
 
@@ -45,6 +46,11 @@
         No directory selected.
       </p>
 
+      <p id="manifest-note" class="manifest-note" hidden>
+        Comparison target: <strong>SMP Client Full</strong> (<code>core</code>
+        + <code>client-optional</code> from the current <code>smp</code> catalog).
+      </p>
+
       <section id="results" class="results" hidden aria-labelledby="results-heading">
         <div class="results-heading">
           <div>
@@ -68,6 +74,7 @@
             <thead>
               <tr>
                 <th scope="col">Path</th>
+                <th scope="col">Manifest</th>
                 <th scope="col">Size</th>
                 <th scope="col">Modified</th>
               </tr>

@@ -3,6 +3,7 @@ const directoryInput = document.querySelector("#directory-input");
 const directoryPicker = document.querySelector("#directory-picker");
 const supportMessage = document.querySelector("#support-message");
 const status = document.querySelector("#status");
+const manifestNote = document.querySelector("#manifest-note");
 const results = document.querySelector("#results");
 const resultsHeading = document.querySelector("#results-heading");
 const fileCount = document.querySelector("#file-count");
@@ -10,6 +11,15 @@ const totalSize = document.querySelector("#total-size");
 const fileList = document.querySelector("#file-list");
 
 const supportsDirectoryHandles = "showDirectoryPicker" in window;
+const catalogUrls = [
+  "https://raw.githubusercontent.com/yurei-dll/smp/main/pack/catalog/core.json",
+  "https://raw.githubusercontent.com/yurei-dll/smp/main/pack/catalog/client-optional.json",
+];
+
+let manifestPromise;
+let displayedFiles = [];
+let collapsedGroups = new Set();
+let initializedGroups = new Set();
 
 supportMessage.textContent = supportsDirectoryHandles
   ? "This browser can read a directory directly after you grant access."
@@ -23,31 +33,38 @@ chooseButton.addEventListener("click", async () => {
   }
 
   try {
-    const directory = await window.showDirectoryPicker({ mode: "read" });
-    beginRead(directory.name);
-    const files = await readDirectoryHandle(directory);
-    showResults(directory.name, files);
+    const selectedDirectory = await window.showDirectoryPicker({ mode: "read" });
+    const modsDirectory = await findModsDirectoryHandle(selectedDirectory);
+    beginRead("mods");
+    const files = await readDirectoryHandle(modsDirectory);
+    await compareAndShow("mods", files);
   } catch (error) {
     handlePickerError(error);
   }
 });
 
-directoryInput.addEventListener("change", () => {
+directoryInput.addEventListener("change", async () => {
   const selectedFiles = Array.from(directoryInput.files ?? []);
   if (selectedFiles.length === 0) {
     return;
   }
 
-  const directoryName = rootName(selectedFiles[0].webkitRelativePath);
-  beginRead(directoryName);
+  try {
+    const selectedDirectoryName = rootName(selectedFiles[0].webkitRelativePath);
+    const modsFiles = selectModsFiles(selectedFiles, selectedDirectoryName);
+    beginRead("mods");
 
-  const files = selectedFiles.map((file) => ({
-    path: stripRoot(file.webkitRelativePath),
-    size: file.size,
-    lastModified: file.lastModified,
-  }));
+    const files = modsFiles.map(({ file, path }) => ({
+      path,
+      size: file.size,
+      lastModified: file.lastModified,
+      file,
+    }));
 
-  showResults(directoryName, files);
+    await compareAndShow("mods", files);
+  } catch (error) {
+    handlePickerError(error);
+  }
 });
 
 directoryPicker.addEventListener("dragenter", handleDragEnter);
@@ -92,10 +109,10 @@ async function handleDrop(event) {
       throw new Error("Drop exactly one folder, not individual files.");
     }
 
-    const directory = entries[0];
-    beginRead(directory.name);
-    const files = await readDirectoryEntry(directory);
-    showResults(directory.name, files);
+    const modsDirectory = await findModsDirectoryEntry(entries[0]);
+    beginRead("mods");
+    const files = await readDirectoryEntry(modsDirectory);
+    await compareAndShow("mods", files);
   } catch (error) {
     handlePickerError(error);
   }
@@ -117,10 +134,48 @@ async function readDirectoryHandle(directory, parentPath = "") {
       path,
       size: file.size,
       lastModified: file.lastModified,
+      file,
     });
   }
 
   return files;
+}
+
+async function findModsDirectoryHandle(selectedDirectory) {
+  if (selectedDirectory.name.toLowerCase() === "mods") {
+    return selectedDirectory;
+  }
+
+  const directMods = await optionalDirectoryHandle(selectedDirectory, "mods");
+  if (directMods) {
+    return directMods;
+  }
+
+  for (const minecraftName of ["minecraft", ".minecraft"]) {
+    const minecraft = await optionalDirectoryHandle(selectedDirectory, minecraftName);
+    if (!minecraft) {
+      continue;
+    }
+    const nestedMods = await optionalDirectoryHandle(minecraft, "mods");
+    if (nestedMods) {
+      return nestedMods;
+    }
+  }
+
+  throw new Error(
+    "No mods folder found. Choose mods, .minecraft, or the parent instance folder.",
+  );
+}
+
+async function optionalDirectoryHandle(parent, name) {
+  try {
+    return await parent.getDirectoryHandle(name);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "NotFoundError") {
+      return null;
+    }
+    throw error;
+  }
 }
 
 async function readDirectoryEntry(directory, parentPath = "") {
@@ -140,10 +195,45 @@ async function readDirectoryEntry(directory, parentPath = "") {
       path,
       size: file.size,
       lastModified: file.lastModified,
+      file,
     });
   }
 
   return files;
+}
+
+async function findModsDirectoryEntry(selectedDirectory) {
+  if (selectedDirectory.name.toLowerCase() === "mods") {
+    return selectedDirectory;
+  }
+
+  const selectedChildren = await readAllEntries(selectedDirectory.createReader());
+  const directMods = findChildDirectory(selectedChildren, "mods");
+  if (directMods) {
+    return directMods;
+  }
+
+  for (const minecraftName of ["minecraft", ".minecraft"]) {
+    const minecraft = findChildDirectory(selectedChildren, minecraftName);
+    if (!minecraft) {
+      continue;
+    }
+    const minecraftChildren = await readAllEntries(minecraft.createReader());
+    const nestedMods = findChildDirectory(minecraftChildren, "mods");
+    if (nestedMods) {
+      return nestedMods;
+    }
+  }
+
+  throw new Error(
+    "No mods folder found. Drop mods, .minecraft, or the parent instance folder.",
+  );
+}
+
+function findChildDirectory(entries, name) {
+  return entries.find(
+    (entry) => entry.isDirectory && entry.name.toLowerCase() === name.toLowerCase(),
+  );
 }
 
 async function readAllEntries(reader) {
@@ -167,11 +257,105 @@ function entryFile(entry) {
 function beginRead(directoryName) {
   chooseButton.disabled = true;
   results.hidden = true;
+  manifestNote.hidden = true;
+  collapsedGroups = new Set();
+  initializedGroups = new Set();
   status.classList.remove("error");
   status.textContent = `Reading ${directoryName}…`;
 }
 
-function showResults(directoryName, files) {
+async function compareAndShow(directoryName, files) {
+  try {
+    status.textContent = `Loading the full-client catalog for ${directoryName}…`;
+    const manifest = await loadManifest();
+    const modFiles = files.filter((file) => isModJar(directoryName, file.path));
+
+    for (const [index, file] of modFiles.entries()) {
+      status.textContent = `Checking mod ${index + 1} of ${modFiles.length}…`;
+      await compareFile(file, manifest);
+    }
+
+    for (const file of files) {
+      file.manifestStatus ??= "not-a-mod";
+    }
+
+    showResults(directoryName, files, true);
+  } catch (error) {
+    manifestPromise = undefined;
+    console.error(error);
+    for (const file of files) {
+      file.manifestStatus = isModJar(directoryName, file.path)
+        ? "unavailable"
+        : "not-a-mod";
+    }
+    showResults(directoryName, files, false);
+    status.classList.add("error");
+    status.textContent = `Read the directory, but could not load the manifest: ${error.message ?? "unknown error"}`;
+  }
+}
+
+async function loadManifest() {
+  manifestPromise ??= Promise.all(
+    catalogUrls.map(async (url) => {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`catalog request failed with HTTP ${response.status}`);
+      }
+      const catalog = await response.json();
+      if (!Array.isArray(catalog)) {
+        throw new Error("catalog response is not an array");
+      }
+      return catalog;
+    }),
+  ).then((catalogs) => {
+    const manifest = new Map();
+    for (const item of catalogs.flat()) {
+      const hash = item?.classification?.sha512;
+      if (typeof item?.filename !== "string" || typeof hash !== "string") {
+        throw new Error("catalog entry is missing a filename or SHA-512 hash");
+      }
+      manifest.set(item.filename.toLowerCase(), hash.toLowerCase());
+    }
+    return manifest;
+  });
+
+  return manifestPromise;
+}
+
+async function compareFile(file, manifest) {
+  const filename = file.path.split("/").at(-1).toLowerCase();
+  const expectedHash = manifest.get(filename);
+
+  if (!expectedHash) {
+    file.manifestStatus = "not-in-manifest";
+    return;
+  }
+
+  const actualHash = await sha512(file.file);
+  file.manifestStatus = actualHash === expectedHash ? "current" : "hash-mismatch";
+}
+
+async function sha512(file) {
+  const digest = await crypto.subtle.digest("SHA-512", await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+function isModJar(directoryName, path) {
+  if (!path.toLowerCase().endsWith(".jar")) {
+    return false;
+  }
+
+  const normalizedPath = path.replaceAll("\\", "/").toLowerCase();
+  return (
+    directoryName.toLowerCase() === "mods" ||
+    normalizedPath.startsWith("mods/") ||
+    normalizedPath.includes("/mods/")
+  );
+}
+
+function showResults(directoryName, files, manifestLoaded) {
   files.sort((left, right) => left.path.localeCompare(right.path));
 
   resultsHeading.textContent = directoryName;
@@ -182,31 +366,160 @@ function showResults(directoryName, files) {
   renderFiles(files);
 
   results.hidden = false;
+  manifestNote.hidden = !manifestLoaded;
   chooseButton.disabled = false;
-  status.textContent = `Finished reading ${files.length.toLocaleString()} files.`;
+  status.textContent = `Finished reading and comparing ${files.length.toLocaleString()} files.`;
 }
 
 function renderFiles(files) {
+  displayedFiles = files;
+  const tree = buildFileTree(files);
   const fragment = document.createDocumentFragment();
-
-  for (const file of files) {
-    const row = document.createElement("tr");
-    const pathCell = document.createElement("td");
-    const sizeCell = document.createElement("td");
-    const modifiedCell = document.createElement("td");
-
-    pathCell.textContent = file.path;
-    pathCell.className = "file-path";
-    sizeCell.textContent = formatBytes(file.size);
-    modifiedCell.textContent = file.lastModified
-      ? new Date(file.lastModified).toLocaleString()
-      : "Unknown";
-
-    row.append(pathCell, sizeCell, modifiedCell);
-    fragment.append(row);
-  }
+  appendDirectoryContents(fragment, tree, "", 0);
 
   fileList.replaceChildren(fragment);
+}
+
+function buildFileTree(files) {
+  const root = createDirectoryNode("");
+
+  for (const file of files) {
+    const parts = file.path.split("/").filter(Boolean);
+    let directory = root;
+
+    for (const part of parts.slice(0, -1)) {
+      if (!directory.directories.has(part)) {
+        directory.directories.set(part, createDirectoryNode(part));
+      }
+      directory = directory.directories.get(part);
+    }
+
+    directory.files.push(file);
+  }
+
+  return root;
+}
+
+function createDirectoryNode(name) {
+  return { name, directories: new Map(), files: [] };
+}
+
+function appendDirectoryContents(fragment, directory, parentPath, depth) {
+  const directories = Array.from(directory.directories.values()).sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
+
+  for (const child of directories) {
+    const path = parentPath ? `${parentPath}/${child.name}` : child.name;
+    initializeGroup(path, child.name.startsWith("."));
+    fragment.append(createGroupRow(child.name, path, depth, "folder"));
+    if (!collapsedGroups.has(path)) {
+      appendDirectoryContents(fragment, child, path, depth + 1);
+    }
+  }
+
+  const regularFiles = directory.files
+    .filter((file) => !file.path.toLowerCase().endsWith(".toml"))
+    .sort(compareFilePaths);
+  const tomlFiles = directory.files
+    .filter((file) => file.path.toLowerCase().endsWith(".toml"))
+    .sort(compareFilePaths);
+
+  for (const file of regularFiles) {
+    fragment.append(createFileRow(file, depth));
+  }
+
+  if (tomlFiles.length > 0) {
+    const groupPath = `${parentPath}/::toml`;
+    initializeGroup(groupPath, true);
+    fragment.append(
+      createGroupRow(`TOML files (${tomlFiles.length})`, groupPath, depth, "toml"),
+    );
+    if (!collapsedGroups.has(groupPath)) {
+      for (const file of tomlFiles) {
+        fragment.append(createFileRow(file, depth + 1));
+      }
+    }
+  }
+}
+
+function initializeGroup(path, collapsedByDefault) {
+  if (initializedGroups.has(path)) {
+    return;
+  }
+  initializedGroups.add(path);
+  if (collapsedByDefault) {
+    collapsedGroups.add(path);
+  }
+}
+
+function createGroupRow(label, path, depth, kind) {
+  const row = document.createElement("tr");
+  row.className = `group-row group-${kind}`;
+  const pathCell = document.createElement("td");
+  const button = document.createElement("button");
+  const collapsed = collapsedGroups.has(path);
+
+  button.type = "button";
+  button.className = "tree-toggle";
+  button.style.setProperty("--depth", depth);
+  button.setAttribute("aria-expanded", String(!collapsed));
+  button.textContent = `${collapsed ? "▸" : "▾"} ${label}`;
+  button.addEventListener("click", () => {
+    if (collapsedGroups.has(path)) {
+      collapsedGroups.delete(path);
+    } else {
+      collapsedGroups.add(path);
+    }
+    renderFiles(displayedFiles);
+  });
+
+  pathCell.append(button);
+  row.append(pathCell, emptyCell(), emptyCell(), emptyCell());
+  return row;
+}
+
+function createFileRow(file, depth) {
+  const row = document.createElement("tr");
+  const pathCell = document.createElement("td");
+  const manifestCell = document.createElement("td");
+  const sizeCell = document.createElement("td");
+  const modifiedCell = document.createElement("td");
+
+  pathCell.textContent = file.path.split("/").at(-1);
+  pathCell.className = "file-path tree-file";
+  pathCell.style.setProperty("--depth", depth);
+  pathCell.title = file.path;
+  manifestCell.append(createStatusBadge(file.manifestStatus));
+  sizeCell.textContent = formatBytes(file.size);
+  modifiedCell.textContent = file.lastModified
+    ? new Date(file.lastModified).toLocaleString()
+    : "Unknown";
+
+  row.append(pathCell, manifestCell, sizeCell, modifiedCell);
+  return row;
+}
+
+function emptyCell() {
+  return document.createElement("td");
+}
+
+function compareFilePaths(left, right) {
+  return left.path.localeCompare(right.path);
+}
+
+function createStatusBadge(manifestStatus) {
+  const labels = {
+    "current": "Current",
+    "hash-mismatch": "Hash mismatch",
+    "not-in-manifest": "Not in manifest",
+    "not-a-mod": "Not a mod",
+    "unavailable": "Unavailable",
+  };
+  const badge = document.createElement("span");
+  badge.className = `badge badge-${manifestStatus}`;
+  badge.textContent = labels[manifestStatus] ?? "Unknown";
+  return badge;
 }
 
 function handlePickerError(error) {
@@ -226,9 +539,29 @@ function rootName(relativePath) {
   return relativePath.split("/", 1)[0] || "Selected directory";
 }
 
-function stripRoot(relativePath) {
-  const separator = relativePath.indexOf("/");
-  return separator === -1 ? relativePath : relativePath.slice(separator + 1);
+function selectModsFiles(files, selectedDirectoryName) {
+  const root = `${selectedDirectoryName}/`;
+  const candidates =
+    selectedDirectoryName.toLowerCase() === "mods"
+      ? [root]
+      : [`${root}mods/`, `${root}minecraft/mods/`, `${root}.minecraft/mods/`];
+  const prefix = candidates.find((candidate) =>
+    files.some((file) =>
+      file.webkitRelativePath.toLowerCase().startsWith(candidate.toLowerCase()),
+    ),
+  );
+
+  if (!prefix) {
+    throw new Error(
+      "No mods folder found. Choose mods, .minecraft, or the parent instance folder.",
+    );
+  }
+
+  return files
+    .filter((file) =>
+      file.webkitRelativePath.toLowerCase().startsWith(prefix.toLowerCase()),
+    )
+    .map((file) => ({ file, path: file.webkitRelativePath.slice(prefix.length) }));
 }
 
 function formatBytes(bytes) {

@@ -123,6 +123,23 @@ button:disabled {
   cursor: wait;
 }
 
+.tree-toggle {
+  width: 100%;
+  padding: 0.15rem 0.25rem 0.15rem calc(0.25rem + var(--depth) * 1.15rem);
+  border: 0;
+  border-radius: 0.25rem;
+  color: #cce8d5;
+  background: transparent;
+  font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-weight: 700;
+  text-align: left;
+}
+
+.tree-toggle:hover {
+  color: #ecf4ee;
+  background: #243a2d;
+}
+
 .status {
   min-height: 1.65em;
   margin: 1rem 0 0;
@@ -130,6 +147,16 @@ button:disabled {
 
 .status.error {
   color: #ffaaa1;
+}
+
+.manifest-note {
+  margin: 0.4rem 0 0;
+  color: #a8b8ad;
+  font-size: 0.9rem;
+}
+
+.manifest-note code {
+  color: #cce8d5;
 }
 
 .results {
@@ -201,6 +228,52 @@ th {
   white-space: normal;
   overflow-wrap: anywhere;
   font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+}
+
+.tree-file {
+  padding-left: calc(0.9rem + var(--depth) * 1.15rem);
+}
+
+.group-row td {
+  background: #132219;
+}
+
+.group-toml td {
+  background: #17231c;
+}
+
+.badge {
+  display: inline-flex;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #3a5142;
+  border-radius: 999px;
+  color: #b8c4bb;
+  background: #19271f;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.badge-current {
+  border-color: #3f8d5a;
+  color: #a9efbf;
+  background: #173522;
+}
+
+.badge-hash-mismatch {
+  border-color: #ae645d;
+  color: #ffc0b9;
+  background: #3b211e;
+}
+
+.badge-not-in-manifest {
+  border-color: #9b7c3d;
+  color: #f6d790;
+  background: #332a18;
+}
+
+.badge-not-a-mod,
+.badge-unavailable {
+  color: #94a299;
 }
 
 tbody tr:last-child td {

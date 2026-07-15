@@ -9,8 +9,10 @@ browser support model, and update safety requirements.
 
 ## Current prototype
 
-The current dependency-free prototype only reads a user-selected directory and
-lists its files. It does not compare manifests or write to the directory.
+The current dependency-free prototype reads a user-selected directory and
+compares mod JARs with the current `core` and `client-optional` catalogs from
+`smp`. Selecting `mods`, `.minecraft`, or a parent Prism instance produces the
+same focused `mods` view. It does not write to the directory.
 
 Serve the repository over localhost and open the printed URL:
 
