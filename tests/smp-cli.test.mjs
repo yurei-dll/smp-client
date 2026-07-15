@@ -23,6 +23,12 @@ test("smp-cli explains the tagged-release prerequisite", async () => {
   assert.match(source, /pack-v<version>/);
 });
 
+test("smp-cli URL-encodes mrpack download paths for curl", async () => {
+  const source = await readFile(cli, "utf8");
+  assert.match(source, /urllib\.parse\.quote\(parts\.path/);
+  assert.match(source, /safe_url = urllib\.parse\.urlunsplit/);
+});
+
 test("README contains a paste-ready piped auto-update command", async () => {
   const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
   assert.match(

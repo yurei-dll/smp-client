@@ -169,6 +169,7 @@ python3 - "$PACK" "$INDEX" "$PLAN" "$RELEASE" "$PROFILE" <<'PY'
 import json
 import pathlib
 import sys
+import urllib.parse
 import zipfile
 
 pack_path, index_path, plan_path = map(pathlib.Path, sys.argv[1:4])
@@ -208,9 +209,19 @@ for entry in files:
     seen.add(filename)
     if not isinstance(sha512, str) or len(sha512) != 128 or any(character not in "0123456789abcdef" for character in sha512.lower()):
         raise SystemExit(f"invalid SHA-512 for {filename}")
-    if not isinstance(downloads, list) or not downloads or not all(isinstance(url, str) and url.startswith("https://") and not any(c in url for c in "\t\r\n") for url in downloads):
+    if not isinstance(downloads, list) or not downloads:
         raise SystemExit(f"invalid download list for {filename}")
-    rows.append((filename, sha512.lower(), downloads[0]))
+    url = downloads[0]
+    if not isinstance(url, str) or any(character in url for character in "\t\r\n"):
+        raise SystemExit(f"invalid download URL for {filename}")
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme != "https" or not parts.netloc or parts.username or parts.password or parts.fragment:
+        raise SystemExit(f"unsafe download URL for {filename}")
+    # Some upstream Modrinth metadata contains literal spaces in CDN paths.
+    # Preserve existing escapes while encoding characters curl rejects.
+    safe_path = urllib.parse.quote(parts.path, safe="/%:@-._~!$&'()*+,;=")
+    safe_url = urllib.parse.urlunsplit((parts.scheme, parts.netloc, safe_path, parts.query, ""))
+    rows.append((filename, sha512.lower(), safe_url))
 with plan_path.open("w", encoding="utf-8", newline="") as output:
     for row in rows:
         output.write("\t".join(row) + "\n")
@@ -285,8 +296,12 @@ if [[ $ALLOW_JAR_DELETION != true ]]; then
 fi
 
 printf '\nDownloading and verifying required JARs…\n'
+download_number=0
+download_total=$((${#INSTALL[@]} + ${#REPLACE[@]}))
 for filename in "${INSTALL[@]}" "${REPLACE[@]}"; do
   [[ -n $filename ]] || continue
+  download_number=$((download_number + 1))
+  printf '  [%d/%d] %s\n' "$download_number" "$download_total" "$filename"
   download "${DESIRED_URL[$filename]}" "$STAGE/$filename"
   actual=$(sha512sum -- "$STAGE/$filename" | cut -d' ' -f1)
   [[ $actual == "${DESIRED_HASH[$filename]}" ]] || die "SHA-512 verification failed for $filename"
