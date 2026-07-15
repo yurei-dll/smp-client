@@ -21,9 +21,18 @@
             anywhere on this page. Nothing is uploaded or changed.
           </p>
         </div>
-        <button id="choose-directory" class="choose-button" type="button">
-          Choose folder
-        </button>
+        <div class="header-actions">
+          <label class="pack-picker">
+            <span>Pack</span>
+            <select id="pack-profile">
+              <option value="client" selected>Standard pack</option>
+              <option value="core">Barebones pack</option>
+            </select>
+          </label>
+          <button id="choose-directory" class="choose-button" type="button">
+            Choose folder
+          </button>
+        </div>
         <input
           id="directory-input"
           type="file"
@@ -41,8 +50,9 @@
       </div>
 
       <p id="manifest-note" class="manifest-note" hidden>
-        Comparison target: <strong>SMP Client Full</strong> (<code>core</code>
-        + <code>client-optional</code> from the current <code>smp</code> catalog).
+        Comparison target: <strong id="manifest-profile-name">Standard pack</strong>
+        (<span id="manifest-profile-groups"><code>core</code> + <code>client</code></span>
+        from the current <code>smp</code> catalog).
       </p>
 
       <div class="workspace">

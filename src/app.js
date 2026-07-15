@@ -1,9 +1,14 @@
+import { catalogUrlsFor, profileFor } from "./profiles.js";
+
 const chooseButton = document.querySelector("#choose-directory");
+const packProfile = document.querySelector("#pack-profile");
 const directoryInput = document.querySelector("#directory-input");
 const directoryPicker = document.querySelector("#directory-picker");
 const supportMessage = document.querySelector("#support-message");
 const status = document.querySelector("#status");
 const manifestNote = document.querySelector("#manifest-note");
+const manifestProfileName = document.querySelector("#manifest-profile-name");
+const manifestProfileGroups = document.querySelector("#manifest-profile-groups");
 const results = document.querySelector("#results");
 const resultsHeading = document.querySelector("#results-heading");
 const fileCount = document.querySelector("#file-count");
@@ -20,11 +25,6 @@ const guideContent = document.querySelector("#guide-content");
 const downloadScriptButton = document.querySelector("#download-script");
 
 const supportsDirectoryHandles = "showDirectoryPicker" in window;
-const catalogUrls = [
-  "https://raw.githubusercontent.com/yurei-dll/smp/main/pack/catalog/core.json",
-  "https://raw.githubusercontent.com/yurei-dll/smp/main/pack/catalog/client-optional.json",
-];
-
 let manifestPromise;
 let displayedFiles = [];
 let displayedActions = [];
@@ -53,6 +53,17 @@ chooseButton.addEventListener("click", async () => {
   } catch (error) {
     handlePickerError(error);
   }
+});
+
+packProfile.addEventListener("change", async () => {
+  manifestPromise = undefined;
+  updateManifestProfileNote();
+  if (displayedFiles.length === 0 || results.hidden) {
+    return;
+  }
+
+  beginRead("mods");
+  await compareAndShow("mods", displayedFiles);
 });
 
 directoryInput.addEventListener("change", async () => {
@@ -303,6 +314,7 @@ function entryFile(entry) {
 
 function beginRead(directoryName) {
   chooseButton.disabled = true;
+  packProfile.disabled = true;
   results.hidden = true;
   manifestNote.hidden = true;
   proposedActions.hidden = true;
@@ -317,7 +329,7 @@ function beginRead(directoryName) {
 
 async function compareAndShow(directoryName, files) {
   try {
-    status.textContent = `Loading the full-client catalog for ${directoryName}…`;
+    status.textContent = `Loading the ${profileFor(packProfile.value).name} catalog for ${directoryName}…`;
     const manifest = await loadManifest();
     const modFiles = files.filter((file) => isModJar(directoryName, file.path));
 
@@ -348,7 +360,7 @@ async function compareAndShow(directoryName, files) {
 
 async function loadManifest() {
   manifestPromise ??= Promise.all(
-    catalogUrls.map(async (url) => {
+    catalogUrlsFor(packProfile.value).map(async (url) => {
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`catalog request failed with HTTP ${response.status}`);
@@ -406,7 +418,7 @@ function buildProposedActions(modFiles, manifest) {
         kind: "install",
         path: expectedFile.filename,
         title: `Install ${expectedFile.filename}`,
-        detail: "This full-client manifest JAR is missing.",
+        detail: "This JAR is missing from the selected pack.",
         sha512: expectedFile.sha512,
         source: expectedFile.source,
         versionId: expectedFile.versionId,
@@ -432,7 +444,7 @@ function buildProposedActions(modFiles, manifest) {
         kind: "archive",
         path: file.path,
         title: `Archive ${file.path}`,
-        detail: "This local JAR is not in the full-client manifest. It may be a user-installed mod.",
+        detail: "This local JAR is not in the selected pack. It may be a user-installed mod.",
         expectedSha512: file.sha512,
       });
     }
@@ -476,7 +488,26 @@ function showResults(directoryName, files, manifestLoaded, actions) {
     proposedActions.hidden = true;
   }
   chooseButton.disabled = false;
+  packProfile.disabled = false;
   status.textContent = `Finished reading and comparing ${files.length.toLocaleString()} files.`;
+}
+
+function updateManifestProfileNote() {
+  const profile = profileFor(packProfile.value);
+  manifestProfileName.textContent = profile.name;
+  const groups = profile.groups.map((group) => {
+    const code = document.createElement("code");
+    code.textContent = group;
+    return code;
+  });
+  const contents = [];
+  for (const [index, group] of groups.entries()) {
+    if (index > 0) {
+      contents.push(document.createTextNode(" + "));
+    }
+    contents.push(group);
+  }
+  manifestProfileGroups.replaceChildren(...contents);
 }
 
 function renderActions(actions) {

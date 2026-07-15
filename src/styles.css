@@ -88,6 +88,35 @@ h2 {
   color: #cce8d5;
 }
 
+.header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  gap: 0.55rem;
+}
+
+.pack-picker {
+  display: grid;
+  gap: 0.2rem;
+  color: #9cac9f;
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pack-picker select {
+  padding: 0.4rem 1.8rem 0.4rem 0.55rem;
+  border: 1px solid #496052;
+  border-radius: 0.45rem;
+  color: #d8e4dc;
+  background: #1a2b21;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: none;
+  cursor: pointer;
+}
+
 .choose-button {
   flex: 0 0 auto;
   width: auto;
@@ -581,6 +610,10 @@ body.dragging .drop-overlay {
   .topbar,
   .status-line {
     align-items: flex-start;
+  }
+
+  .topbar {
+    flex-direction: column;
   }
 
   .support-message {
