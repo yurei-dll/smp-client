@@ -1,5 +1,7 @@
 # smp-client
 
+[![Build modpacks](https://github.com/yurei-dll/smp/actions/workflows/build-modpacks.yml/badge.svg)](https://github.com/yurei-dll/smp/actions/workflows/build-modpacks.yml)
+
 A browser-based updater for Minecraft instances built from the pack manifests
 published by the sibling [`smp`](https://github.com/yurei-dll/smp) repository.
 
