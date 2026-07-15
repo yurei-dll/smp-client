@@ -125,7 +125,9 @@ STAGE=$WORK_DIR/stage
 mkdir -p -- "$STAGE"
 
 printf 'Checking latest SMP %s pack…\n' "$PROFILE"
-download "$RELEASE_BASE_URL/release-manifest.json" "$MANIFEST"
+if ! download "$RELEASE_BASE_URL/release-manifest.json" "$MANIFEST"; then
+  die "no published pack release was found; publish a matching pack-v<version> tag in yurei-dll/smp"
+fi
 
 IFS=$'\t' read -r RELEASE TAG ASSET EXPECTED_SHA256 EXPECTED_SIZE < <(
   python3 - "$MANIFEST" "$PROFILE" <<'PY'
@@ -156,7 +158,9 @@ print("\t".join((release, tag, asset, sha256.lower(), size)))
 PY
 )
 
-download "$RELEASE_BASE_URL/$ASSET" "$PACK"
+if ! download "$RELEASE_BASE_URL/$ASSET" "$PACK"; then
+  die "release $TAG does not expose its expected asset: $ASSET"
+fi
 [[ $(wc -c <"$PACK") -eq $EXPECTED_SIZE ]] || die "downloaded pack size does not match the release manifest"
 printf '%s  %s\n' "$EXPECTED_SHA256" "$PACK" | sha256sum --check --status - \
   || die "downloaded pack failed SHA-256 verification"
