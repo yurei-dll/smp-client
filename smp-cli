@@ -1,0 +1,357 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RELEASE_BASE_URL="https://github.com/yurei-dll/smp/releases/latest/download"
+PROFILE=client
+MODS_DIR=
+AUTO_UPDATE=false
+ALLOW_JAR_DELETION=false
+
+usage() {
+  cat <<'EOF'
+Usage: smp-cli [options]
+
+Update a local SMP mod folder from the latest published pack.
+
+Options:
+  --auto-update          Apply the displayed plan without prompting.
+  --allow-jar-deletion   Permanently delete unexpected JARs instead of
+                         renaming them to <name>.jar.disabled.
+  --profile PROFILE      Pack profile to install: client (default) or core.
+  --mods-dir PATH        Explicit path to the Minecraft mods directory.
+  -h, --help             Show this help.
+
+The current directory may be a Prism instance, its minecraft directory, or its
+mods directory. Downloads are staged and cryptographically verified before any
+installed file is changed.
+EOF
+}
+
+die() {
+  printf 'smp-cli: %s\n' "$*" >&2
+  exit 1
+}
+
+while (($#)); do
+  case $1 in
+    --auto-update)
+      AUTO_UPDATE=true
+      ;;
+    --allow-jar-deletion)
+      ALLOW_JAR_DELETION=true
+      ;;
+    --profile)
+      (($# >= 2)) || die "--profile requires a value"
+      PROFILE=$2
+      shift
+      ;;
+    --profile=*)
+      PROFILE=${1#*=}
+      ;;
+    --mods-dir)
+      (($# >= 2)) || die "--mods-dir requires a value"
+      MODS_DIR=$2
+      shift
+      ;;
+    --mods-dir=*)
+      MODS_DIR=${1#*=}
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      die "unknown option: $1 (use --help)"
+      ;;
+  esac
+  shift
+done
+
+case $PROFILE in
+  client|core) ;;
+  *) die "unsupported profile '$PROFILE'; expected client or core" ;;
+esac
+
+for command in python3 sha256sum sha512sum mktemp find; do
+  command -v "$command" >/dev/null 2>&1 || die "required command not found: $command"
+done
+
+if command -v curl >/dev/null 2>&1; then
+  download() {
+    curl --fail --location --silent --show-error --retry 3 --output "$2" "$1"
+  }
+elif command -v wget >/dev/null 2>&1; then
+  download() {
+    wget --quiet --tries=3 --output-document="$2" "$1"
+  }
+else
+  die "curl or wget is required"
+fi
+
+if [[ -z $MODS_DIR ]]; then
+  if [[ ${PWD##*/} == mods ]]; then
+    MODS_DIR=$PWD
+  elif [[ -d $PWD/minecraft/mods ]]; then
+    MODS_DIR=$PWD/minecraft/mods
+  elif [[ -d $PWD/mods ]]; then
+    MODS_DIR=$PWD/mods
+  else
+    die "could not find a mods directory; pass --mods-dir PATH"
+  fi
+fi
+
+[[ -d $MODS_DIR ]] || die "mods directory does not exist: $MODS_DIR"
+MODS_DIR=$(cd -- "$MODS_DIR" && pwd -P)
+
+WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/smp-cli.XXXXXXXX")
+STATE_DIR=$MODS_DIR/.smp-client
+LOCK_DIR=$STATE_DIR/update.lock
+cleanup() {
+  rm -rf -- "$WORK_DIR" "$LOCK_DIR"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+mkdir -p -- "$STATE_DIR"
+if ! mkdir -- "$LOCK_DIR" 2>/dev/null; then
+  die "another update may be running (lock exists: $LOCK_DIR)"
+fi
+
+MANIFEST=$WORK_DIR/release-manifest.json
+PACK=$WORK_DIR/pack.mrpack
+INDEX=$WORK_DIR/modrinth.index.json
+PLAN=$WORK_DIR/desired.tsv
+STAGE=$WORK_DIR/stage
+mkdir -p -- "$STAGE"
+
+printf 'Checking latest SMP %s pack…\n' "$PROFILE"
+download "$RELEASE_BASE_URL/release-manifest.json" "$MANIFEST"
+
+IFS=$'\t' read -r RELEASE TAG ASSET EXPECTED_SHA256 EXPECTED_SIZE < <(
+  python3 - "$MANIFEST" "$PROFILE" <<'PY'
+import json
+import sys
+
+path, profile = sys.argv[1:]
+with open(path, encoding="utf-8") as handle:
+    manifest = json.load(handle)
+if manifest.get("schema_version") != 1:
+    raise SystemExit("unsupported release manifest schema")
+if manifest.get("repository") != "yurei-dll/smp":
+    raise SystemExit("unexpected release repository")
+pack = manifest.get("packs", {}).get(profile)
+if not isinstance(pack, dict) or pack.get("format") != "mrpack":
+    raise SystemExit(f"release does not contain the {profile!r} mrpack")
+values = [manifest.get("release"), manifest.get("tag"), pack.get("asset"), pack.get("sha256"), pack.get("size")]
+if not all(isinstance(value, str) and value for value in values[:4]) or not isinstance(values[4], int) or values[4] < 1:
+    raise SystemExit("release manifest contains invalid pack metadata")
+release, tag, asset, sha256, size = map(str, values)
+if tag != f"pack-v{release}" or not asset.endswith(f"-{profile}.mrpack"):
+    raise SystemExit("release identity does not match the selected pack")
+if len(sha256) != 64 or any(character not in "0123456789abcdef" for character in sha256.lower()):
+    raise SystemExit("release manifest contains an invalid SHA-256")
+if any(character in asset for character in "/\\\t\r\n"):
+    raise SystemExit("release manifest contains an unsafe asset name")
+print("\t".join((release, tag, asset, sha256.lower(), size)))
+PY
+)
+
+download "$RELEASE_BASE_URL/$ASSET" "$PACK"
+[[ $(wc -c <"$PACK") -eq $EXPECTED_SIZE ]] || die "downloaded pack size does not match the release manifest"
+printf '%s  %s\n' "$EXPECTED_SHA256" "$PACK" | sha256sum --check --status - \
+  || die "downloaded pack failed SHA-256 verification"
+
+python3 - "$PACK" "$INDEX" "$PLAN" "$RELEASE" "$PROFILE" <<'PY'
+import json
+import pathlib
+import sys
+import zipfile
+
+pack_path, index_path, plan_path = map(pathlib.Path, sys.argv[1:4])
+release, profile = sys.argv[4:]
+with zipfile.ZipFile(pack_path) as archive:
+    names = archive.namelist()
+    if "modrinth.index.json" not in names:
+        raise SystemExit("mrpack does not contain modrinth.index.json")
+    if names.count("modrinth.index.json") != 1:
+        raise SystemExit("mrpack contains duplicate index entries")
+    index_bytes = archive.read("modrinth.index.json")
+index_path.write_bytes(index_bytes)
+index = json.loads(index_bytes)
+if index.get("formatVersion") != 1 or index.get("game") != "minecraft":
+    raise SystemExit("unsupported mrpack index")
+if index.get("versionId") != release:
+    raise SystemExit("mrpack version does not match the release manifest")
+expected_name = "SMP Client" if profile == "client" else "SMP Core"
+if index.get("name") != expected_name:
+    raise SystemExit("mrpack identity does not match the selected profile")
+files = index.get("files")
+if not isinstance(files, list):
+    raise SystemExit("mrpack files must be an array")
+seen = set()
+rows = []
+for entry in files:
+    path = entry.get("path")
+    sha512 = entry.get("hashes", {}).get("sha512")
+    downloads = entry.get("downloads")
+    if not isinstance(path, str) or not path.startswith("mods/") or path.count("/") != 1:
+        raise SystemExit(f"unsafe or unsupported mrpack path: {path!r}")
+    filename = path.removeprefix("mods/")
+    if not filename.endswith(".jar") or any(character in filename for character in "\t\r\n"):
+        raise SystemExit(f"unsafe or unsupported mod filename: {filename!r}")
+    if filename in seen:
+        raise SystemExit(f"duplicate mod destination: {filename}")
+    seen.add(filename)
+    if not isinstance(sha512, str) or len(sha512) != 128 or any(character not in "0123456789abcdef" for character in sha512.lower()):
+        raise SystemExit(f"invalid SHA-512 for {filename}")
+    if not isinstance(downloads, list) or not downloads or not all(isinstance(url, str) and url.startswith("https://") and not any(c in url for c in "\t\r\n") for url in downloads):
+        raise SystemExit(f"invalid download list for {filename}")
+    rows.append((filename, sha512.lower(), downloads[0]))
+with plan_path.open("w", encoding="utf-8", newline="") as output:
+    for row in rows:
+        output.write("\t".join(row) + "\n")
+PY
+
+declare -A DESIRED_HASH=()
+declare -A DESIRED_URL=()
+declare -A EXISTING_HASH=()
+declare -A UNWANTED_HASH=()
+declare -a INSTALL=()
+declare -a REPLACE=()
+declare -a UNWANTED=()
+
+while IFS=$'\t' read -r filename sha512 url; do
+  [[ -n $filename ]] || continue
+  DESIRED_HASH["$filename"]=$sha512
+  DESIRED_URL["$filename"]=$url
+  destination=$MODS_DIR/$filename
+  if [[ ! -f $destination ]]; then
+    INSTALL+=("$filename")
+  else
+    existing_hash=$(sha512sum -- "$destination" | cut -d' ' -f1)
+    if [[ $existing_hash != "$sha512" ]]; then
+      EXISTING_HASH["$filename"]=$existing_hash
+      REPLACE+=("$filename")
+    fi
+  fi
+done <"$PLAN"
+
+while IFS= read -r -d '' path; do
+  filename=${path##*/}
+  if [[ ! -v DESIRED_HASH["$filename"] ]]; then
+    UNWANTED_HASH["$filename"]=$(sha512sum -- "$path" | cut -d' ' -f1)
+    UNWANTED+=("$filename")
+  fi
+done < <(find "$MODS_DIR" -maxdepth 1 -type f -name '*.jar' -print0)
+
+printf '\nLatest release: %s (%s)\n' "$RELEASE" "$TAG"
+printf 'Mods directory: %s\n' "$MODS_DIR"
+printf 'Install: %d  Replace: %d  %s: %d\n' \
+  "${#INSTALL[@]}" "${#REPLACE[@]}" \
+  "$([[ $ALLOW_JAR_DELETION == true ]] && printf 'Delete' || printf 'Disable')" \
+  "${#UNWANTED[@]}"
+for filename in "${INSTALL[@]}"; do printf '  + %s\n' "$filename"; done
+for filename in "${REPLACE[@]}"; do printf '  ~ %s\n' "$filename"; done
+for filename in "${UNWANTED[@]}"; do
+  if [[ $ALLOW_JAR_DELETION == true ]]; then
+    printf '  - %s\n' "$filename"
+  else
+    printf '  ! %s -> %s.disabled\n' "$filename" "$filename"
+  fi
+done
+
+if ((${#INSTALL[@]} == 0 && ${#REPLACE[@]} == 0 && ${#UNWANTED[@]} == 0)); then
+  printf 'Already up to date.\n'
+  exit 0
+fi
+
+if [[ $AUTO_UPDATE != true ]]; then
+  if [[ ! -r /dev/tty ]]; then
+    die "confirmation requires a terminal; use --auto-update for launcher use"
+  fi
+  read -r -p 'Apply this plan? [y/N] ' answer </dev/tty
+  [[ $answer == y || $answer == Y ]] || die "update canceled"
+fi
+
+if [[ $ALLOW_JAR_DELETION != true ]]; then
+  for filename in "${UNWANTED[@]}"; do
+    [[ ! -e $MODS_DIR/$filename.disabled ]] \
+      || die "refusing to overwrite existing $filename.disabled"
+  done
+fi
+
+printf '\nDownloading and verifying required JARs…\n'
+for filename in "${INSTALL[@]}" "${REPLACE[@]}"; do
+  [[ -n $filename ]] || continue
+  download "${DESIRED_URL[$filename]}" "$STAGE/$filename"
+  actual=$(sha512sum -- "$STAGE/$filename" | cut -d' ' -f1)
+  [[ $actual == "${DESIRED_HASH[$filename]}" ]] || die "SHA-512 verification failed for $filename"
+done
+
+# Recheck the plan after downloads so a concurrent launcher or user edit cannot
+# be overwritten using stale scan results.
+for filename in "${INSTALL[@]}"; do
+  [[ ! -e $MODS_DIR/$filename ]] || die "destination appeared during update: $filename"
+done
+for filename in "${REPLACE[@]}"; do
+  [[ -f $MODS_DIR/$filename ]] || die "file disappeared during update: $filename"
+  actual=$(sha512sum -- "$MODS_DIR/$filename" | cut -d' ' -f1)
+  [[ $actual == "${EXISTING_HASH[$filename]}" ]] || die "file changed during update: $filename"
+done
+for filename in "${UNWANTED[@]}"; do
+  [[ -f $MODS_DIR/$filename ]] || die "file disappeared during update: $filename"
+  actual=$(sha512sum -- "$MODS_DIR/$filename" | cut -d' ' -f1)
+  [[ $actual == "${UNWANTED_HASH[$filename]}" ]] || die "file changed during update: $filename"
+done
+
+BACKUP=$STATE_DIR/backup/$(date -u +%Y%m%dT%H%M%SZ)
+if ((${#REPLACE[@]})); then
+  mkdir -p -- "$BACKUP"
+fi
+for filename in "${REPLACE[@]}"; do
+  mv -- "$MODS_DIR/$filename" "$BACKUP/$filename"
+done
+for filename in "${INSTALL[@]}" "${REPLACE[@]}"; do
+  [[ -n $filename ]] || continue
+  mv -- "$STAGE/$filename" "$MODS_DIR/$filename"
+done
+for filename in "${UNWANTED[@]}"; do
+  path=$MODS_DIR/$filename
+  if [[ $ALLOW_JAR_DELETION == true ]]; then
+    rm -- "$path"
+  else
+    mv -- "$path" "$path.disabled"
+  fi
+done
+
+python3 - "$STATE_DIR/cli-state.json" "$RELEASE" "$TAG" "$PROFILE" <<'PY'
+import json
+import os
+import pathlib
+import sys
+import tempfile
+from datetime import datetime, timezone
+
+path = pathlib.Path(sys.argv[1])
+state = {
+    "schema_version": 1,
+    "release": sys.argv[2],
+    "tag": sys.argv[3],
+    "profile": sys.argv[4],
+    "updated_at": datetime.now(timezone.utc).isoformat(),
+}
+fd, temporary = tempfile.mkstemp(prefix=".cli-state.", dir=path.parent)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as output:
+        json.dump(state, output, indent=2)
+        output.write("\n")
+    os.replace(temporary, path)
+finally:
+    if os.path.exists(temporary):
+        os.unlink(temporary)
+PY
+
+printf '\nUpdated to SMP %s (%s).\n' "$RELEASE" "$PROFILE"
+if ((${#REPLACE[@]})); then
+  printf 'Replaced JAR backups: %s\n' "$BACKUP"
+fi
