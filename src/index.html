@@ -18,7 +18,8 @@
           <h1>Mod folder check</h1>
           <p class="intro">
             Drop <code>mods</code>, <code>.minecraft</code>, or a Prism instance
-            anywhere on this page. Nothing is uploaded or changed.
+            anywhere on this page. Nothing is uploaded; changes require an explicit
+            review and confirmation.
           </p>
         </div>
         <div class="header-actions">
@@ -134,6 +135,25 @@
       <div class="guide-footer">
         <button id="download-script" class="download-button" type="button">
           Download generated script
+        </button>
+      </div>
+    </dialog>
+
+    <dialog id="apply-confirm" class="apply-modal" aria-labelledby="apply-heading">
+      <div class="guide-heading">
+        <div>
+          <p id="apply-eyebrow" class="eyebrow">Direct update</p>
+          <h2 id="apply-heading">Review browser actions</h2>
+        </div>
+        <button id="close-apply" class="modal-close" type="button" aria-label="Close update review">
+          &times;
+        </button>
+      </div>
+      <div id="apply-content" class="apply-content"></div>
+      <div id="apply-footer" class="guide-footer apply-footer">
+        <button id="cancel-apply" class="secondary-button" type="button">Cancel</button>
+        <button id="confirm-apply" class="apply-button" type="button">
+          Confirm and apply
         </button>
       </div>
     </dialog>

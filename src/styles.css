@@ -498,7 +498,19 @@ tbody tr:last-child td {
   background: #101d16;
 }
 
-.guide-modal::backdrop {
+.apply-modal {
+  width: min(46rem, calc(100% - 2rem));
+  max-height: calc(100vh - 2rem);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #5fb77c;
+  border-radius: 0.7rem;
+  color: #ecf4ee;
+  background: #101d16;
+}
+
+.guide-modal::backdrop,
+.apply-modal::backdrop {
   background: rgb(4 10 6 / 75%);
 }
 
@@ -533,6 +545,108 @@ tbody tr:last-child td {
 
 .modal-close:hover {
   color: #fff;
+}
+
+.secondary-button {
+  padding: 0.42rem 0.7rem;
+  border: 1px solid #496052;
+  border-radius: 0.45rem;
+  color: #d8e4dc;
+  background: #1a2b21;
+  font-size: 0.75rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.secondary-button:hover {
+  background: #24382b;
+}
+
+.apply-content {
+  max-height: min(62vh, 36rem);
+  padding: 0.9rem;
+  overflow: auto;
+}
+
+.apply-intro,
+.apply-message,
+.apply-warning,
+.apply-progress-label {
+  color: #aebdb3;
+  font-size: 0.8rem;
+}
+
+.apply-warning {
+  margin-top: 0.9rem;
+  padding: 0.65rem;
+  border: 1px solid #715d2d;
+  border-radius: 0.4rem;
+  color: #f6d790;
+  background: #2b2415;
+}
+
+.apply-error {
+  color: #ffaaa1;
+}
+
+.apply-operation-list {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0.85rem 0 0;
+  padding-left: 1.5rem;
+}
+
+.apply-operation-list li {
+  padding-left: 0.15rem;
+}
+
+.apply-operation-list strong,
+.apply-operation-list code {
+  display: block;
+}
+
+.apply-operation-list strong {
+  margin-bottom: 0.25rem;
+  font-size: 0.78rem;
+}
+
+.apply-operation-list code {
+  padding: 0.4rem 0.5rem;
+  overflow-wrap: anywhere;
+  border: 1px solid #294234;
+  border-radius: 0.35rem;
+  color: #c9f5d7;
+  background: #0b1510;
+  font-size: 0.68rem;
+}
+
+.apply-loading {
+  min-height: 15rem;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 0.9rem;
+  text-align: center;
+}
+
+.apply-loading progress {
+  width: min(24rem, 100%);
+  accent-color: #5fb77c;
+}
+
+.apply-spinner {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 0.25rem solid #294234;
+  border-top-color: #83e3a4;
+  border-radius: 50%;
+  animation: apply-spin 750ms linear infinite;
+}
+
+@keyframes apply-spin {
+  to {
+    transform: rotate(1turn);
+  }
 }
 
 .guide-tabs {
