@@ -649,7 +649,7 @@ async function openDirectApplyReview() {
   applyConfirm.showModal();
 
   try {
-    directActions = await Promise.all(actions.map(resolveActionDownload));
+    directActions = await resolveActionDownloads(actions);
     renderDirectApplyReview();
     setApplyControls({ confirmDisabled: false });
   } catch (error) {
@@ -929,7 +929,7 @@ async function openApplyGuide() {
   applyGuide.showModal();
 
   try {
-    guideActions = await Promise.all(actions.map(resolveActionDownload));
+    guideActions = await resolveActionDownloads(actions);
     renderGuide();
     downloadScriptButton.disabled = false;
   } catch (error) {
@@ -957,7 +957,7 @@ async function resolveActionDownload(action) {
 
   for (const endpoint of endpoints) {
     try {
-      version = await fetchModrinthJson(endpoint);
+      version = await fetchModrinthJson(endpoint, {}, 1);
       break;
     } catch (error) {
       failures.push(error.message ?? "unknown error");
@@ -980,20 +980,74 @@ async function resolveActionDownload(action) {
   return { ...action, downloadUrl: file.url };
 }
 
-async function fetchModrinthJson(url) {
-  const retryDelays = [0, 350, 900];
+async function resolveActionDownloads(actions) {
+  const resolved = new Map();
+  const downloadable = actions.filter((action) => action.kind !== "disable");
+
+  if (downloadable.length > 0) {
+    try {
+      const versionsByHash = await fetchModrinthJson(
+        "https://api.modrinth.com/v2/version_files",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            hashes: downloadable.map((action) => action.sha512),
+            algorithm: "sha512",
+          }),
+        },
+      );
+      for (const action of downloadable) {
+        const version = versionsByHash[action.sha512] ?? versionsByHash[action.sha512.toLowerCase()];
+        const file = matchingModrinthFile(version, action);
+        if (file) {
+          resolved.set(action, { ...action, downloadUrl: file.url });
+        }
+      }
+    } catch (error) {
+      console.warn(`Modrinth batch lookup failed; falling back sequentially: ${error.message}`);
+    }
+  }
+
+  // Avoid a retry storm if the batch route is degraded or omits an entry.
+  for (const action of actions) {
+    if (action.kind === "disable") {
+      resolved.set(action, action);
+    } else if (!resolved.has(action)) {
+      resolved.set(action, await resolveActionDownload(action));
+      await wait(120);
+    }
+  }
+
+  return actions.map((action) => resolved.get(action));
+}
+
+function matchingModrinthFile(version, action) {
+  return version?.files?.find(
+    (candidate) =>
+      candidate.filename === action.path &&
+      candidate.hashes?.sha512?.toLowerCase() === action.sha512,
+  );
+}
+
+async function fetchModrinthJson(url, options = {}, maxAttempts = 3) {
+  const retryDelays = [0, 350, 900].slice(0, maxAttempts);
   let lastStatus;
 
   for (const [attempt, delay] of retryDelays.entries()) {
     if (delay > 0) {
       await wait(delay);
     }
-    const response = await fetch(url);
+    const response = await fetch(url, options);
     if (response.ok) {
       return response.json();
     }
 
     lastStatus = response.status;
+    const remaining = Number(response.headers.get("X-Ratelimit-Remaining"));
+    if (Number.isFinite(remaining) && remaining <= 2) {
+      throw new Error(`HTTP ${response.status}; Modrinth rate-limit quota is exhausted`);
+    }
     const transient = response.status === 429 || response.status >= 500;
     if (!transient || attempt === retryDelays.length - 1) {
       break;
