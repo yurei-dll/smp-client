@@ -376,9 +376,15 @@ async function compareAndShow(directoryName, files) {
     status.textContent = `Loading the ${profileFor(packProfile.value).name} catalog for ${directoryName}…`;
     const manifest = await loadManifest();
     const modFiles = files.filter((file) => isModJar(directoryName, file.path));
+    const disabledModFiles = files.filter((file) => isDisabledModJar(directoryName, file.path));
 
-    for (const [index, file] of modFiles.entries()) {
-      status.textContent = `Checking mod ${index + 1} of ${modFiles.length}…`;
+    const filesToCheck = [...modFiles, ...disabledModFiles];
+    for (const [index, file] of filesToCheck.entries()) {
+      status.textContent = `Checking mod ${index + 1} of ${filesToCheck.length}…`;
+      if (isDisabledModJar(directoryName, file.path)) {
+        await compareDisabledFile(file, manifest);
+        continue;
+      }
       await compareFile(file, manifest);
     }
 
@@ -386,15 +392,17 @@ async function compareAndShow(directoryName, files) {
       file.manifestStatus ??= "not-a-mod";
     }
 
-    const actions = buildProposedActions(modFiles, manifest);
+    const actions = buildProposedActions(modFiles, disabledModFiles, manifest);
     showResults(directoryName, files, true, actions);
   } catch (error) {
     manifestPromise = undefined;
     console.error(error);
     for (const file of files) {
-      file.manifestStatus = isModJar(directoryName, file.path)
-        ? "unavailable"
-        : "not-a-mod";
+      file.manifestStatus = isDisabledModJar(directoryName, file.path)
+        ? "disabled"
+        : isModJar(directoryName, file.path)
+          ? "unavailable"
+          : "not-a-mod";
     }
     showResults(directoryName, files, false, []);
     status.classList.add("error");
@@ -451,14 +459,41 @@ async function compareFile(file, manifest) {
     actualHash === expectedFile.sha512 ? "current" : "hash-mismatch";
 }
 
-function buildProposedActions(modFiles, manifest) {
+async function compareDisabledFile(file, manifest) {
+  const activeFilename = file.path.slice(0, -".disabled".length);
+  const expectedFile = manifest.get(activeFilename.toLowerCase());
+  file.sha512 = await sha512(file.file);
+  file.disabledMatchesManifest = Boolean(expectedFile && file.sha512 === expectedFile.sha512);
+  file.manifestStatus = "disabled";
+}
+
+function buildProposedActions(modFiles, disabledModFiles, manifest) {
   const actions = [];
   const installedFilenames = new Set(
     modFiles.map((file) => file.path.split("/").at(-1).toLowerCase()),
   );
+  const disabledByActiveFilename = new Map(
+    disabledModFiles.map((file) => [
+      file.path.slice(0, -".disabled".length).toLowerCase(),
+      file,
+    ]),
+  );
 
   for (const expectedFile of manifest.values()) {
-    if (!installedFilenames.has(expectedFile.filename.toLowerCase())) {
+    const normalizedFilename = expectedFile.filename.toLowerCase();
+    if (!installedFilenames.has(normalizedFilename)) {
+      const disabledFile = disabledByActiveFilename.get(normalizedFilename);
+      if (disabledFile?.disabledMatchesManifest) {
+        actions.push({
+          kind: "enable",
+          path: expectedFile.filename,
+          title: `Enable ${expectedFile.filename}`,
+          detail: `Restore ${disabledFile.path}; its SHA-512 matches the selected pack.`,
+          expectedSha512: disabledFile.sha512,
+          sha512: expectedFile.sha512,
+        });
+        continue;
+      }
       actions.push({
         kind: "install",
         path: expectedFile.filename,
@@ -497,7 +532,7 @@ function buildProposedActions(modFiles, manifest) {
     }
   }
 
-  const kindOrder = { install: 0, replace: 1, disable: 2 };
+  const kindOrder = { enable: 0, install: 1, replace: 2, disable: 3 };
   return actions.sort(
     (left, right) =>
       kindOrder[left.kind] - kindOrder[right.kind] || left.path.localeCompare(right.path),
@@ -527,6 +562,13 @@ function isModJar(directoryName, path) {
 
   const normalizedPath = path.replaceAll("\\", "/").toLowerCase();
   return directoryName.toLowerCase() === "mods" && !normalizedPath.includes("/");
+}
+
+function isDisabledModJar(directoryName, path) {
+  const normalizedPath = path.replaceAll("\\", "/").toLowerCase();
+  return directoryName.toLowerCase() === "mods" &&
+    normalizedPath.endsWith(".jar.disabled") &&
+    !normalizedPath.includes("/");
 }
 
 function showResults(directoryName, files, manifestLoaded, actions) {
@@ -850,6 +892,9 @@ function renderDirectApplyReview() {
 }
 
 function directOperationSummary(action) {
+  if (action.kind === "enable") {
+    return `recheck(${action.path}.disabled) → ensure(missing) → copy(${action.path}) → verify(copy) → remove(disabled)`;
+  }
   if (action.kind === "disable") {
     return `recheck(${action.path}) → copy(${action.path}.disabled) → verify(copy) → remove(original)`;
   }
@@ -999,7 +1044,7 @@ async function runDirectTransaction(modsDirectory, actions, updateProgress) {
   try {
     for (const [index, action] of actions.entries()) {
       assertSafeModFilename(action.path);
-      if (action.kind === "disable") {
+      if (action.kind === "disable" || action.kind === "enable") {
         continue;
       }
       updateProgress(`Downloading and verifying ${action.path}…`, index);
@@ -1017,9 +1062,14 @@ async function runDirectTransaction(modsDirectory, actions, updateProgress) {
 
     updateProgress("Rechecking the selected folder…", 0);
     for (const action of actions) {
-      if (action.kind === "install") {
+      if (action.kind === "install" || action.kind === "enable") {
         if (await fileExists(modsDirectory, action.path)) {
           throw new Error(`${action.path} now exists; scan again before applying.`);
+        }
+        if (action.kind === "enable") {
+          const disabledPath = `${action.path}.disabled`;
+          const disabled = await readBytes(modsDirectory, disabledPath);
+          await assertHash(disabled, action.expectedSha512, `${disabledPath} changed since the scan`);
         }
       } else {
         const existing = await readBytes(modsDirectory, action.path);
@@ -1032,7 +1082,13 @@ async function runDirectTransaction(modsDirectory, actions, updateProgress) {
 
     for (const [index, action] of actions.entries()) {
       updateProgress(`Applying ${action.path}…`, index);
-      if (action.kind === "disable") {
+      if (action.kind === "enable") {
+        const disabledPath = `${action.path}.disabled`;
+        const disabled = await readBytes(modsDirectory, disabledPath);
+        await writeBytes(modsDirectory, action.path, disabled);
+        await assertHash(await readBytes(modsDirectory, action.path), action.sha512, action.path);
+        await modsDirectory.removeEntry(disabledPath);
+      } else if (action.kind === "disable") {
         const existing = await readBytes(modsDirectory, action.path);
         await writeBytes(modsDirectory, `${action.path}.disabled`, existing);
         await assertHash(
@@ -1136,7 +1192,7 @@ async function openApplyGuide() {
 }
 
 async function resolveActionDownload(action) {
-  if (action.kind === "disable") {
+  if (action.kind === "disable" || action.kind === "enable") {
     return action;
   }
   if (action.downloadUrl) {
@@ -1185,7 +1241,7 @@ async function resolveActionDownloads(actions, onProgress = () => {}) {
   onProgress(`Checking ${actions.length} selected action${actions.length === 1 ? "" : "s"}…`);
 
   for (const [index, action] of actions.entries()) {
-    if (action.kind === "disable") {
+    if (action.kind === "disable" || action.kind === "enable") {
       resolved.set(action, action);
     } else if (action.downloadUrl) {
       assertTrustedDownloadUrl(action.downloadUrl, action.path);
@@ -1195,7 +1251,7 @@ async function resolveActionDownloads(actions, onProgress = () => {}) {
   }
 
   const downloadable = actions.filter(
-    (action) => action.kind !== "disable" && !resolved.has(action),
+    (action) => action.kind !== "disable" && action.kind !== "enable" && !resolved.has(action),
   );
 
   if (downloadable.length > 0) {
@@ -1227,7 +1283,7 @@ async function resolveActionDownloads(actions, onProgress = () => {}) {
 
   // Avoid a retry storm if the batch route is degraded or omits an entry.
   for (const action of actions) {
-    if (action.kind === "disable") {
+    if (action.kind === "disable" || action.kind === "enable") {
       resolved.set(action, action);
     } else if (!resolved.has(action)) {
       onProgress(`Resolving fallback metadata for ${action.path}…`);
@@ -1352,6 +1408,9 @@ function manualCommand(action, operatingSystem) {
     const path = quotePowerShell(action.path);
     const backup = quotePowerShell(`.smp-client\\backup\\manual\\${action.path}`);
     const disabled = quotePowerShell(`${action.path}.disabled`);
+    if (action.kind === "enable") {
+      return `if (Test-Path -LiteralPath ${path}) { throw 'Destination now exists' }; if ((Get-FileHash -Algorithm SHA512 -LiteralPath ${disabled}).Hash.ToLower() -ne '${action.expectedSha512}') { throw 'Disabled file changed since scan' }; Move-Item -LiteralPath ${disabled} -Destination ${path}`;
+    }
     const verifyExisting = action.expectedSha512
       ? `if ((Get-FileHash -Algorithm SHA512 -LiteralPath ${path}).Hash.ToLower() -ne '${action.expectedSha512}') { throw 'File changed since scan' }; `
       : `if (Test-Path -LiteralPath ${path}) { throw 'Destination now exists' }; `;
@@ -1371,6 +1430,9 @@ function manualCommand(action, operatingSystem) {
   const path = quoteShell(action.path);
   const backup = quoteShell(`.smp-client/backup/manual/${action.path}`);
   const disabled = quoteShell(`${action.path}.disabled`);
+  if (action.kind === "enable") {
+    return `test ! -e ${path} && test "$(sha512sum -- ${disabled} | cut -d' ' -f1)" = '${action.expectedSha512}' && mv -- ${disabled} ${path}`;
+  }
   const verifyExisting = action.expectedSha512
     ? `test "$(sha512sum -- ${path} | cut -d' ' -f1)" = '${action.expectedSha512}' && `
     : `test ! -e ${path} && `;
@@ -1420,6 +1482,15 @@ function createShellScript(actions) {
   for (const [index, action] of actions.entries()) {
     const path = quoteShell(action.path);
     const backupPath = `\"$BACKUP/${escapeDoubleQuotedShell(action.path)}\"`;
+    if (action.kind === "enable") {
+      const disabledPath = quoteShell(`${action.path}.disabled`);
+      lines.push(
+        `test ! -e ${path} || { echo "Destination now exists: ${escapeDoubleQuotedShell(action.path)}" >&2; exit 1; }`,
+        `verify_hash ${disabledPath} '${action.expectedSha512}'`,
+        `mv -- ${disabledPath} ${path}`,
+      );
+      continue;
+    }
     if (action.kind === "disable") {
       const disabledPath = quoteShell(`${action.path}.disabled`);
       lines.push(
@@ -1465,6 +1536,15 @@ function createPowerShellScript(actions) {
   for (const [index, action] of actions.entries()) {
     const path = quotePowerShell(action.path);
     const backup = `$Backup + ${quotePowerShell(`\\${action.path}`)}`;
+    if (action.kind === "enable") {
+      const disabled = quotePowerShell(`${action.path}.disabled`);
+      lines.push(
+        `  if (Test-Path -LiteralPath ${path}) { throw 'Destination now exists: ${escapePowerShell(action.path)}' }`,
+        `  if ((Get-FileHash -Algorithm SHA512 -LiteralPath ${disabled}).Hash.ToLower() -ne '${action.expectedSha512}') { throw 'Changed since scan: ${escapePowerShell(action.path)}.disabled' }`,
+        `  Move-Item -LiteralPath ${disabled} -Destination ${path}`,
+      );
+      continue;
+    }
     if (action.kind === "disable") {
       const disabled = quotePowerShell(`${action.path}.disabled`);
       lines.push(
@@ -1654,6 +1734,7 @@ function createStatusBadge(manifestStatus) {
     "hash-mismatch": "Hash mismatch",
     "not-in-manifest": "Not in manifest",
     "not-a-mod": "Not a mod",
+    "disabled": "Disabled",
     "unavailable": "Unavailable",
   };
   const badge = document.createElement("span");

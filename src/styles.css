@@ -482,6 +482,17 @@ tbody tr:last-child td {
   background: #332a18;
 }
 
+.action-enable .action-kind {
+  color: #c5d2ff;
+  background: #202a48;
+}
+
+.badge-disabled {
+  border-color: #3a4740;
+  color: #7f8b83;
+  background: #151d18;
+}
+
 .no-actions {
   padding: 0.75rem;
   color: #a9efbf;
