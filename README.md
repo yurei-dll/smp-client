@@ -24,7 +24,9 @@ be updated directly after a plan review, final confirmation, and explicit
 read/write permission grant. Direct updates stage and SHA-512 verify downloads,
 recheck scanned files before mutation, and back up replaced JARs under
 `mods/.smp-client/backup/`. Other browsers retain the read-only guide and script
-workflow.
+workflow. Chrome Safe Browsing or an organization-managed DLP policy may block
+File System Access writes after permission is granted; when that happens, the
+client preserves the selection and offers the generated local apply script.
 
 The hosted prototype is available at
 [yurei-dll.github.io/smp-client](https://yurei-dll.github.io/smp-client/).

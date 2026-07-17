@@ -645,6 +645,8 @@ async function openDirectApplyReview() {
   }
 
   directActions = [];
+  confirmApplyButton.onclick = null;
+  confirmApplyButton.textContent = "Confirm and apply";
   applyEyebrow.textContent = "Direct update";
   applyHeading.textContent = "Review browser actions";
   const resolutionMessage = createApplyMessage("Reading catalog download links…");
@@ -686,7 +688,9 @@ function renderDirectApplyReview() {
 
   const warning = document.createElement("p");
   warning.className = "apply-warning";
-  warning.textContent = `${directActions.length} selected action${directActions.length === 1 ? "" : "s"} will modify this folder after one final browser permission prompt.`;
+  warning.textContent =
+    `${directActions.length} selected action${directActions.length === 1 ? "" : "s"} will modify this folder after one final browser permission prompt. ` +
+    "Chrome may scan downloaded JARs and block filesystem writes. Do not disable Safe Browsing. If Chrome blocks the update, no mod changes will begin and you can continue with the generated local apply script.";
   applyContent.replaceChildren(intro, list, warning);
 }
 
@@ -765,12 +769,39 @@ async function applyDirectChanges() {
   } catch (error) {
     console.error(error);
     applyEyebrow.textContent = "Update stopped";
-    applyHeading.textContent = "No further changes will run";
-    applyContent.replaceChildren(
-      createApplyMessage(`Could not finish applying changes: ${error.message ?? "unknown error"}`, true),
-    );
-    setApplyControls();
+    if (isSafeBrowsingBlock(error)) {
+      applyHeading.textContent = "Chrome blocked filesystem writes";
+      applyContent.replaceChildren(
+        createApplyMessage(
+          "The completed downloads passed their network and SHA-512 checks, but Chrome Safe Browsing or an organization DLP policy blocked the browser from staging a file. No mod changes were started. The website cannot override this browser decision; use the generated local apply script for the same selected actions.",
+          true,
+        ),
+      );
+      directActions = [];
+      setApplyControls();
+      confirmApplyButton.textContent = "Open apply guide";
+      confirmApplyButton.onclick = () => {
+        confirmApplyButton.onclick = null;
+        confirmApplyButton.textContent = "Confirm and apply";
+        applyConfirm.close();
+        openApplyGuide();
+      };
+    } else {
+      applyHeading.textContent = "No further changes will run";
+      applyContent.replaceChildren(
+        createApplyMessage(`Could not finish applying changes: ${error.message ?? "unknown error"}`, true),
+      );
+      setApplyControls();
+    }
   }
+}
+
+function isSafeBrowsingBlock(error) {
+  return (
+    error?.name === "AbortError" &&
+    typeof error?.message === "string" &&
+    error.message.toLowerCase().includes("safe browsing")
+  );
 }
 
 async function requestWritePermission(handle) {
