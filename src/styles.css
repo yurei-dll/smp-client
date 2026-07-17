@@ -15,9 +15,14 @@ body {
   min-width: 320px;
   min-height: 100vh;
   margin: 0;
-  padding-bottom: 2rem;
-  background: radial-gradient(circle at 15% 0%, rgb(50 116 75 / 20%), transparent 32rem),
-    #0d1712;
+  padding-bottom: 2.75rem;
+  background-image:
+    radial-gradient(ellipse at center, transparent 15%, rgb(5 9 6 / 45%) 55%, rgb(3 6 4 / 95%) 100%),
+    linear-gradient(rgb(7 18 11 / 38%), rgb(7 18 11 / 38%)),
+    url("assets/mine-blocks-dirt.png");
+  background-position: center, center, top left;
+  background-size: cover, cover, 256px 256px;
+  background-attachment: fixed;
 }
 
 button,
@@ -27,7 +32,7 @@ input {
 
 .shell {
   width: min(92rem, calc(100% - 2rem));
-  min-height: calc(100vh - 2rem);
+  min-height: calc(100vh - 2.75rem);
   margin: 0 auto;
   padding: 1.25rem 0 2rem;
 }
@@ -39,6 +44,7 @@ input {
   left: 0;
   z-index: 10;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
@@ -640,8 +646,13 @@ body.dragging .drop-overlay {
 }
 
 @media (max-width: 38rem) {
+  body {
+    padding-bottom: 4rem;
+  }
+
   .shell {
     width: min(100% - 1rem, 92rem);
+    min-height: calc(100vh - 4rem);
     padding-top: 0.75rem;
   }
 

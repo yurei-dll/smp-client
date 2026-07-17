@@ -54,3 +54,11 @@ instance. Without `--allow-jar-deletion`, unexpected JARs are renamed to
 directory detection is not appropriate. The sister `smp` repository must have
 at least one published `pack-v<version>` GitHub Release; workflow artifacts from
 untagged builds are not stable updater inputs.
+
+## Licensing
+
+The application code is available under the [MIT License](LICENSE). The Mine
+Blocks dirt texture used by the website is a separately licensed third-party
+asset and is not covered by the MIT License. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for its source, attribution,
+and noncommercial-use restriction.
