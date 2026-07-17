@@ -8,6 +8,7 @@
       content="Read the contents of a local Minecraft or Prism Launcher directory."
     />
     <title>SMP Client</title>
+    <link rel="icon" href="data:," />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body id="directory-picker">
@@ -18,7 +19,8 @@
           <h1>Mod folder check</h1>
           <p class="intro">
             Drop <code>mods</code>, <code>.minecraft</code>, or a Prism instance
-            anywhere on this page. Nothing is uploaded or changed.
+            anywhere on this page. Nothing is uploaded; changes require an explicit
+            review and confirmation.
           </p>
         </div>
         <div class="header-actions">
@@ -89,13 +91,22 @@
               <p class="eyebrow">Review only</p>
               <h2 id="actions-heading">Proposed actions</h2>
             </div>
-            <p id="action-count" class="panel-count"></p>
+            <div class="action-heading-tools">
+              <label id="select-all-label" class="select-all" hidden>
+                <input id="select-all-actions" type="checkbox" />
+                <span>Select all</span>
+              </label>
+              <p id="action-count" class="panel-count"></p>
+            </div>
           </div>
-          <p class="actions-note">
+          <p id="actions-note" class="actions-note" aria-live="polite">
             Unchecked by default. Selecting an action still changes nothing.
           </p>
           <ul id="action-list" class="action-list"></ul>
           <div class="actions-footer">
+            <button id="delete-disabled" class="danger-button" type="button" hidden>
+              Delete disabled mods
+            </button>
             <button id="open-guide" class="guide-button" type="button" disabled>
               Apply guide
             </button>
@@ -134,6 +145,44 @@
       <div class="guide-footer">
         <button id="download-script" class="download-button" type="button">
           Download generated script
+        </button>
+      </div>
+    </dialog>
+
+    <dialog id="apply-confirm" class="apply-modal" aria-labelledby="apply-heading">
+      <div class="guide-heading">
+        <div>
+          <p id="apply-eyebrow" class="eyebrow">Direct update</p>
+          <h2 id="apply-heading">Review browser actions</h2>
+        </div>
+        <button id="close-apply" class="modal-close" type="button" aria-label="Close update review">
+          &times;
+        </button>
+      </div>
+      <div id="apply-content" class="apply-content"></div>
+      <div id="apply-footer" class="guide-footer apply-footer">
+        <button id="cancel-apply" class="secondary-button" type="button">Cancel</button>
+        <button id="confirm-apply" class="apply-button" type="button">
+          Confirm and apply
+        </button>
+      </div>
+    </dialog>
+
+    <dialog id="cleanup-confirm" class="apply-modal" aria-labelledby="cleanup-heading">
+      <div class="guide-heading">
+        <div>
+          <p class="eyebrow">Permanent cleanup</p>
+          <h2 id="cleanup-heading">Delete disabled mods?</h2>
+        </div>
+        <button id="close-cleanup" class="modal-close" type="button" aria-label="Close cleanup">
+          &times;
+        </button>
+      </div>
+      <div id="cleanup-content" class="apply-content"></div>
+      <div class="guide-footer">
+        <button id="cancel-cleanup" class="secondary-button" type="button">Cancel</button>
+        <button id="confirm-cleanup" class="danger-button" type="button" disabled>
+          Permanently delete
         </button>
       </div>
     </dialog>

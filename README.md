@@ -18,8 +18,18 @@ Selecting `mods`, `.minecraft`, or a parent Prism instance produces the
 same focused `mods` view. After comparison it proposes missing installs, hash
 replacements, and disabling of unrecognized JARs by appending `.disabled`; every proposed action
 is unchecked by default. Checked actions can be opened in an OS-specific manual
-guide or exported as a generated Bash or PowerShell script. The website itself
-does not write to the directory.
+guide or exported as a generated Bash or PowerShell script. On desktop
+Chromium-based browsers, folders selected through the browser picker can also
+be updated directly after a plan review, final confirmation, and explicit
+read/write permission grant. Direct updates stage and SHA-512 verify downloads,
+recheck scanned files before mutation, and back up replaced JARs under
+`mods/.smp-client/backup/`. Other browsers retain the read-only guide and script
+workflow. Chrome Safe Browsing or an organization-managed DLP policy may block
+File System Access writes after permission is granted; when that happens, the
+client preserves the selection and offers the generated local apply script.
+After all corrective actions are complete, Chromium users may permanently
+delete root-level `.jar.disabled` files through a separate confirmation that is
+intended only after the updated pack has launched successfully.
 
 The hosted prototype is available at
 [yurei-dll.github.io/smp-client](https://yurei-dll.github.io/smp-client/).

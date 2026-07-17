@@ -426,7 +426,7 @@ changes, so both sides of the contract must be treated as security-sensitive.
 3. Implement instance selection, validation, scanning, and hashing in the
    website.
 4. Implement comparison and the expandable update report.
-5. Implement Chromium direct updates with backup and verification.
+5. Implement Chromium direct updates with backup and verification. (Prototype complete.)
 6. Implement corrective ZIP generation and stable Unix/PowerShell interpreters.
 7. Test both workflows against disposable Prism instances on Linux and Windows.
 8. Add production hosting controls and publish the website.
