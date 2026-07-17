@@ -11,6 +11,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   min-width: 320px;
   min-height: 100vh;
@@ -31,10 +35,13 @@ input {
 }
 
 .shell {
+  display: flex;
+  flex-direction: column;
   width: min(92rem, calc(100% - 2rem));
+  height: calc(100dvh - 2.75rem);
   min-height: calc(100vh - 2.75rem);
   margin: 0 auto;
-  padding: 1.25rem 0 2rem;
+  padding: 1.25rem 0 0.5rem;
 }
 
 .site-footer {
@@ -245,14 +252,20 @@ button:disabled {
 
 .workspace {
   display: grid;
+  flex: 1 1 auto;
   grid-template-columns: minmax(0, 1.25fr) minmax(22rem, 0.75fr);
-  align-items: start;
+  align-items: stretch;
   gap: 0.75rem;
+  min-height: 0;
   margin-top: 0.75rem;
 }
 
 .panel {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  height: 100%;
+  max-height: none;
   overflow: hidden;
   border: 1px solid #294234;
   border-radius: 0.6rem;
@@ -279,8 +292,11 @@ button:disabled {
 
 .table-wrap,
 .action-list {
-  max-height: calc(100vh - 12.5rem);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 table {
@@ -832,13 +848,18 @@ body.dragging .drop-overlay {
 }
 
 @media (max-width: 58rem) {
+  .shell {
+    height: auto;
+  }
+
   .workspace {
+    flex: none;
     grid-template-columns: 1fr;
   }
 
-  .table-wrap,
-  .action-list {
-    max-height: 30rem;
+  .panel {
+    height: auto;
+    max-height: min(36rem, calc(100dvh - 8rem));
   }
 }
 
@@ -849,6 +870,7 @@ body.dragging .drop-overlay {
 
   .shell {
     width: min(100% - 1rem, 92rem);
+    height: auto;
     min-height: calc(100vh - 4rem);
     padding-top: 0.75rem;
   }
