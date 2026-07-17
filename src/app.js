@@ -403,6 +403,7 @@ async function loadManifest() {
         sha512: hash.toLowerCase(),
         source: item.source,
         versionId: item.platform_version_id,
+        downloadUrl: item.download_url,
       });
     }
     return manifest;
@@ -442,6 +443,7 @@ function buildProposedActions(modFiles, manifest) {
         sha512: expectedFile.sha512,
         source: expectedFile.source,
         versionId: expectedFile.versionId,
+        downloadUrl: expectedFile.downloadUrl,
       });
     }
   }
@@ -458,6 +460,7 @@ function buildProposedActions(modFiles, manifest) {
         sha512: expectedFile.sha512,
         source: expectedFile.source,
         versionId: expectedFile.versionId,
+        downloadUrl: expectedFile.downloadUrl,
       });
     } else if (file.manifestStatus === "not-in-manifest") {
       actions.push({
@@ -644,12 +647,15 @@ async function openDirectApplyReview() {
   directActions = [];
   applyEyebrow.textContent = "Direct update";
   applyHeading.textContent = "Review browser actions";
-  applyContent.replaceChildren(createApplyMessage("Resolving trusted downloads…"));
+  const resolutionMessage = createApplyMessage("Reading catalog download links…");
+  applyContent.replaceChildren(resolutionMessage);
   setApplyControls({ confirmDisabled: true });
   applyConfirm.showModal();
 
   try {
-    directActions = await resolveActionDownloads(actions);
+    directActions = await resolveActionDownloads(actions, (message) => {
+      resolutionMessage.textContent = message;
+    });
     renderDirectApplyReview();
     setApplyControls({ confirmDisabled: false });
   } catch (error) {
@@ -924,12 +930,15 @@ async function openApplyGuide() {
 
   guideActions = [];
   renderGuideTabs();
-  guideContent.replaceChildren(createGuideMessage("Resolving download information…"));
+  const resolutionMessage = createGuideMessage("Reading catalog download links…");
+  guideContent.replaceChildren(resolutionMessage);
   downloadScriptButton.disabled = true;
   applyGuide.showModal();
 
   try {
-    guideActions = await resolveActionDownloads(actions);
+    guideActions = await resolveActionDownloads(actions, (message) => {
+      resolutionMessage.textContent = message;
+    });
     renderGuide();
     downloadScriptButton.disabled = false;
   } catch (error) {
@@ -942,6 +951,10 @@ async function openApplyGuide() {
 
 async function resolveActionDownload(action) {
   if (action.kind === "disable") {
+    return action;
+  }
+  if (action.downloadUrl) {
+    assertTrustedDownloadUrl(action.downloadUrl, action.path);
     return action;
   }
   if (action.source !== "modrinth" || !action.versionId) {
@@ -977,14 +990,30 @@ async function resolveActionDownload(action) {
   if (!file?.url) {
     throw new Error(`Modrinth did not return the catalog-matched file for ${action.path}.`);
   }
+  assertTrustedDownloadUrl(file.url, action.path);
   return { ...action, downloadUrl: file.url };
 }
 
-async function resolveActionDownloads(actions) {
+async function resolveActionDownloads(actions, onProgress = () => {}) {
   const resolved = new Map();
-  const downloadable = actions.filter((action) => action.kind !== "disable");
+  onProgress(`Checking ${actions.length} selected action${actions.length === 1 ? "" : "s"}…`);
+
+  for (const [index, action] of actions.entries()) {
+    if (action.kind === "disable") {
+      resolved.set(action, action);
+    } else if (action.downloadUrl) {
+      assertTrustedDownloadUrl(action.downloadUrl, action.path);
+      resolved.set(action, action);
+    }
+    onProgress(`Prepared ${index + 1}/${actions.length}: ${action.path}`);
+  }
+
+  const downloadable = actions.filter(
+    (action) => action.kind !== "disable" && !resolved.has(action),
+  );
 
   if (downloadable.length > 0) {
+    onProgress(`Resolving ${downloadable.length} legacy catalog entr${downloadable.length === 1 ? "y" : "ies"}…`);
     try {
       const versionsByHash = await fetchModrinthJson(
         "https://api.modrinth.com/v2/version_files",
@@ -1001,6 +1030,7 @@ async function resolveActionDownloads(actions) {
         const version = versionsByHash[action.sha512] ?? versionsByHash[action.sha512.toLowerCase()];
         const file = matchingModrinthFile(version, action);
         if (file) {
+          assertTrustedDownloadUrl(file.url, action.path);
           resolved.set(action, { ...action, downloadUrl: file.url });
         }
       }
@@ -1014,12 +1044,25 @@ async function resolveActionDownloads(actions) {
     if (action.kind === "disable") {
       resolved.set(action, action);
     } else if (!resolved.has(action)) {
+      onProgress(`Resolving fallback metadata for ${action.path}…`);
       resolved.set(action, await resolveActionDownload(action));
       await wait(120);
     }
   }
 
   return actions.map((action) => resolved.get(action));
+}
+
+function assertTrustedDownloadUrl(downloadUrl, path) {
+  let parsed;
+  try {
+    parsed = new URL(downloadUrl);
+  } catch {
+    throw new Error(`The catalog download URL is invalid for ${path}.`);
+  }
+  if (parsed.protocol !== "https:" || parsed.hostname !== "cdn.modrinth.com") {
+    throw new Error(`The catalog download URL is not a trusted Modrinth CDN URL for ${path}.`);
+  }
 }
 
 function matchingModrinthFile(version, action) {
