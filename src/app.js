@@ -948,13 +948,27 @@ async function resolveActionDownload(action) {
     throw new Error(`No supported download source is available for ${action.path}.`);
   }
 
-  const response = await fetch(
+  const endpoints = [
+    `https://api.modrinth.com/v2/version_file/${encodeURIComponent(action.sha512)}?algorithm=sha512`,
     `https://api.modrinth.com/v2/version/${encodeURIComponent(action.versionId)}`,
-  );
-  if (!response.ok) {
-    throw new Error(`Modrinth returned HTTP ${response.status} for ${action.path}.`);
+  ];
+  const failures = [];
+  let version;
+
+  for (const endpoint of endpoints) {
+    try {
+      version = await fetchModrinthJson(endpoint);
+      break;
+    } catch (error) {
+      failures.push(error.message ?? "unknown error");
+    }
   }
-  const version = await response.json();
+
+  if (!version) {
+    throw new Error(
+      `Modrinth could not resolve ${action.path} by SHA-512 or version ID (${failures.join("; ")}).`,
+    );
+  }
   const file = version.files?.find(
     (candidate) =>
       candidate.filename === action.path &&
@@ -964,6 +978,33 @@ async function resolveActionDownload(action) {
     throw new Error(`Modrinth did not return the catalog-matched file for ${action.path}.`);
   }
   return { ...action, downloadUrl: file.url };
+}
+
+async function fetchModrinthJson(url) {
+  const retryDelays = [0, 350, 900];
+  let lastStatus;
+
+  for (const [attempt, delay] of retryDelays.entries()) {
+    if (delay > 0) {
+      await wait(delay);
+    }
+    const response = await fetch(url);
+    if (response.ok) {
+      return response.json();
+    }
+
+    lastStatus = response.status;
+    const transient = response.status === 429 || response.status >= 500;
+    if (!transient || attempt === retryDelays.length - 1) {
+      break;
+    }
+  }
+
+  throw new Error(`HTTP ${lastStatus}`);
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function renderGuideTabs() {
