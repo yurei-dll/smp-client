@@ -1,192 +1,182 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="Read the contents of a local Minecraft or Prism Launcher directory."
-    />
-    <title>SMP Client</title>
-    <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body id="directory-picker">
-    <main class="shell">
-      <header class="topbar">
-        <div class="brand">
-          <p class="eyebrow">SMP client</p>
-          <h1>Mod folder check</h1>
-          <p class="intro">
-            Drop <code>mods</code>, <code>.minecraft</code>, or a Prism instance
-            anywhere on this page. Nothing is uploaded; changes require an explicit
-            review and confirmation.
-          </p>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="google-site-verification" content="DFlcz2TxTmBRtMtN7CxoSZ5YJMGbXYb7KiqA3oJDsi8" />
+  <meta name="description" content="Read the contents of a local Minecraft or Prism Launcher directory." />
+  <title>SMP Client</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body id="directory-picker">
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <p class="eyebrow">SMP client</p>
+        <h1>Mod folder check</h1>
+        <p class="intro">
+          Drop <code>mods</code>, <code>.minecraft</code>, or a Prism instance
+          anywhere on this page. Nothing is uploaded; changes require an explicit
+          review and confirmation.
+        </p>
+      </div>
+      <div class="header-actions">
+        <label class="pack-picker">
+          <span>Pack</span>
+          <select id="pack-profile">
+            <option value="client" selected>Standard pack</option>
+            <option value="core">Barebones pack</option>
+          </select>
+        </label>
+        <button id="choose-directory" class="choose-button" type="button">
+          Choose folder
+        </button>
+      </div>
+      <input id="directory-input" type="file" webkitdirectory multiple hidden />
+    </header>
+
+    <div class="status-line">
+      <p id="status" class="status" role="status" aria-live="polite">
+        No directory selected.
+      </p>
+      <p id="support-message" class="support-message"></p>
+    </div>
+
+    <p id="manifest-note" class="manifest-note" hidden>
+      Comparison target: <strong id="manifest-profile-name">Standard pack</strong>
+      (<span id="manifest-profile-groups"><code>core</code> + <code>client</code></span>
+      from the current <code>smp</code> catalog).
+    </p>
+
+    <div class="workspace">
+      <section id="results" class="panel results" hidden aria-labelledby="results-heading">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Selected directory</p>
+            <h2 id="results-heading"></h2>
+          </div>
+          <p class="panel-count"><span id="file-count">0</span> files</p>
         </div>
-        <div class="header-actions">
-          <label class="pack-picker">
-            <span>Pack</span>
-            <select id="pack-profile">
-              <option value="client" selected>Standard pack</option>
-              <option value="core">Barebones pack</option>
-            </select>
-          </label>
-          <button id="choose-directory" class="choose-button" type="button">
-            Choose folder
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Path</th>
+                <th scope="col">Manifest</th>
+              </tr>
+            </thead>
+            <tbody id="file-list"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="proposed-actions" class="panel proposed-actions" hidden aria-labelledby="actions-heading">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Review only</p>
+            <h2 id="actions-heading">Proposed actions</h2>
+          </div>
+          <div class="action-heading-tools">
+            <label id="select-all-label" class="select-all" hidden>
+              <input id="select-all-actions" type="checkbox" />
+              <span>Select all</span>
+            </label>
+            <p id="action-count" class="panel-count"></p>
+          </div>
+        </div>
+        <p id="actions-note" class="actions-note" aria-live="polite">
+          Unchecked by default. Selecting an action still changes nothing.
+        </p>
+        <ul id="action-list" class="action-list"></ul>
+        <div class="actions-footer">
+          <button id="delete-disabled" class="danger-button" type="button" hidden>
+            Delete disabled mods
+          </button>
+          <button id="open-guide" class="guide-button" type="button" disabled>
+            Apply guide
+          </button>
+          <button id="apply-actions" class="apply-button" type="button" disabled>
+            Apply changes
           </button>
         </div>
-        <input
-          id="directory-input"
-          type="file"
-          webkitdirectory
-          multiple
-          hidden
-        />
-      </header>
+      </section>
+    </div>
+  </main>
 
-      <div class="status-line">
-        <p id="status" class="status" role="status" aria-live="polite">
-          No directory selected.
-        </p>
-        <p id="support-message" class="support-message"></p>
+  <footer class="site-footer">
+    <a href="https://yurei-dll.github.io/yurei-dll/">Yūrei.dll</a>
+    <span aria-hidden="true">·</span>
+    <span>Code: MIT License · Copyright &copy; 2026 Yūrei.dll</span>
+    <span aria-hidden="true">·</span>
+    <a href="https://mineblocks.com/1/wiki/index.php?title=File:Dirt.png">
+      Dirt texture: Mine Blocks by Zanzlanz
+    </a>
+  </footer>
+
+  <div class="drop-overlay" aria-hidden="true">Drop folder to scan</div>
+
+  <dialog id="apply-guide" class="guide-modal" aria-labelledby="guide-heading">
+    <div class="guide-heading">
+      <div>
+        <p class="eyebrow">Selected actions</p>
+        <h2 id="guide-heading">Apply changes manually</h2>
       </div>
+      <button id="close-guide" class="modal-close" type="button" aria-label="Close guide">
+        &times;
+      </button>
+    </div>
+    <div id="guide-tabs" class="guide-tabs" role="tablist" aria-label="Operating system"></div>
+    <div id="guide-content" class="guide-content"></div>
+    <div class="guide-footer">
+      <button id="download-script" class="download-button" type="button">
+        Download generated script
+      </button>
+    </div>
+  </dialog>
 
-      <p id="manifest-note" class="manifest-note" hidden>
-        Comparison target: <strong id="manifest-profile-name">Standard pack</strong>
-        (<span id="manifest-profile-groups"><code>core</code> + <code>client</code></span>
-        from the current <code>smp</code> catalog).
-      </p>
-
-      <div class="workspace">
-        <section id="results" class="panel results" hidden aria-labelledby="results-heading">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Selected directory</p>
-              <h2 id="results-heading"></h2>
-            </div>
-            <p class="panel-count"><span id="file-count">0</span> files</p>
-          </div>
-
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Path</th>
-                  <th scope="col">Manifest</th>
-                </tr>
-              </thead>
-              <tbody id="file-list"></tbody>
-            </table>
-          </div>
-        </section>
-
-        <section
-          id="proposed-actions"
-          class="panel proposed-actions"
-          hidden
-          aria-labelledby="actions-heading"
-        >
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Review only</p>
-              <h2 id="actions-heading">Proposed actions</h2>
-            </div>
-            <div class="action-heading-tools">
-              <label id="select-all-label" class="select-all" hidden>
-                <input id="select-all-actions" type="checkbox" />
-                <span>Select all</span>
-              </label>
-              <p id="action-count" class="panel-count"></p>
-            </div>
-          </div>
-          <p id="actions-note" class="actions-note" aria-live="polite">
-            Unchecked by default. Selecting an action still changes nothing.
-          </p>
-          <ul id="action-list" class="action-list"></ul>
-          <div class="actions-footer">
-            <button id="delete-disabled" class="danger-button" type="button" hidden>
-              Delete disabled mods
-            </button>
-            <button id="open-guide" class="guide-button" type="button" disabled>
-              Apply guide
-            </button>
-            <button id="apply-actions" class="apply-button" type="button" disabled>
-              Apply changes
-            </button>
-          </div>
-        </section>
+  <dialog id="apply-confirm" class="apply-modal" aria-labelledby="apply-heading">
+    <div class="guide-heading">
+      <div>
+        <p id="apply-eyebrow" class="eyebrow">Direct update</p>
+        <h2 id="apply-heading">Review browser actions</h2>
       </div>
-    </main>
+      <button id="close-apply" class="modal-close" type="button" aria-label="Close update review">
+        &times;
+      </button>
+    </div>
+    <div id="apply-content" class="apply-content"></div>
+    <div id="apply-footer" class="guide-footer apply-footer">
+      <button id="cancel-apply" class="secondary-button" type="button">Cancel</button>
+      <button id="confirm-apply" class="apply-button" type="button">
+        Confirm and apply
+      </button>
+    </div>
+  </dialog>
 
-    <footer class="site-footer">
-      <a href="https://yurei-dll.github.io/yurei-dll/">Yūrei.dll</a>
-      <span aria-hidden="true">·</span>
-      <span>Code: MIT License · Copyright &copy; 2026 Yūrei.dll</span>
-      <span aria-hidden="true">·</span>
-      <a href="https://mineblocks.com/1/wiki/index.php?title=File:Dirt.png">
-        Dirt texture: Mine Blocks by Zanzlanz
-      </a>
-    </footer>
+  <dialog id="cleanup-confirm" class="apply-modal" aria-labelledby="cleanup-heading">
+    <div class="guide-heading">
+      <div>
+        <p class="eyebrow">Permanent cleanup</p>
+        <h2 id="cleanup-heading">Delete disabled mods?</h2>
+      </div>
+      <button id="close-cleanup" class="modal-close" type="button" aria-label="Close cleanup">
+        &times;
+      </button>
+    </div>
+    <div id="cleanup-content" class="apply-content"></div>
+    <div class="guide-footer">
+      <button id="cancel-cleanup" class="secondary-button" type="button">Cancel</button>
+      <button id="confirm-cleanup" class="danger-button" type="button" disabled>
+        Permanently delete
+      </button>
+    </div>
+  </dialog>
 
-    <div class="drop-overlay" aria-hidden="true">Drop folder to scan</div>
+  <script type="module" src="app.js"></script>
+</body>
 
-    <dialog id="apply-guide" class="guide-modal" aria-labelledby="guide-heading">
-      <div class="guide-heading">
-        <div>
-          <p class="eyebrow">Selected actions</p>
-          <h2 id="guide-heading">Apply changes manually</h2>
-        </div>
-        <button id="close-guide" class="modal-close" type="button" aria-label="Close guide">
-          &times;
-        </button>
-      </div>
-      <div id="guide-tabs" class="guide-tabs" role="tablist" aria-label="Operating system"></div>
-      <div id="guide-content" class="guide-content"></div>
-      <div class="guide-footer">
-        <button id="download-script" class="download-button" type="button">
-          Download generated script
-        </button>
-      </div>
-    </dialog>
-
-    <dialog id="apply-confirm" class="apply-modal" aria-labelledby="apply-heading">
-      <div class="guide-heading">
-        <div>
-          <p id="apply-eyebrow" class="eyebrow">Direct update</p>
-          <h2 id="apply-heading">Review browser actions</h2>
-        </div>
-        <button id="close-apply" class="modal-close" type="button" aria-label="Close update review">
-          &times;
-        </button>
-      </div>
-      <div id="apply-content" class="apply-content"></div>
-      <div id="apply-footer" class="guide-footer apply-footer">
-        <button id="cancel-apply" class="secondary-button" type="button">Cancel</button>
-        <button id="confirm-apply" class="apply-button" type="button">
-          Confirm and apply
-        </button>
-      </div>
-    </dialog>
-
-    <dialog id="cleanup-confirm" class="apply-modal" aria-labelledby="cleanup-heading">
-      <div class="guide-heading">
-        <div>
-          <p class="eyebrow">Permanent cleanup</p>
-          <h2 id="cleanup-heading">Delete disabled mods?</h2>
-        </div>
-        <button id="close-cleanup" class="modal-close" type="button" aria-label="Close cleanup">
-          &times;
-        </button>
-      </div>
-      <div id="cleanup-content" class="apply-content"></div>
-      <div class="guide-footer">
-        <button id="cancel-cleanup" class="secondary-button" type="button">Cancel</button>
-        <button id="confirm-cleanup" class="danger-button" type="button" disabled>
-          Permanently delete
-        </button>
-      </div>
-    </dialog>
-
-    <script type="module" src="app.js"></script>
-  </body>
 </html>
