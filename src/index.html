@@ -91,13 +91,22 @@
               <p class="eyebrow">Review only</p>
               <h2 id="actions-heading">Proposed actions</h2>
             </div>
-            <p id="action-count" class="panel-count"></p>
+            <div class="action-heading-tools">
+              <label id="select-all-label" class="select-all" hidden>
+                <input id="select-all-actions" type="checkbox" />
+                <span>Select all</span>
+              </label>
+              <p id="action-count" class="panel-count"></p>
+            </div>
           </div>
           <p id="actions-note" class="actions-note" aria-live="polite">
             Unchecked by default. Selecting an action still changes nothing.
           </p>
           <ul id="action-list" class="action-list"></ul>
           <div class="actions-footer">
+            <button id="delete-disabled" class="danger-button" type="button" hidden>
+              Delete disabled mods
+            </button>
             <button id="open-guide" class="guide-button" type="button" disabled>
               Apply guide
             </button>
@@ -155,6 +164,25 @@
         <button id="cancel-apply" class="secondary-button" type="button">Cancel</button>
         <button id="confirm-apply" class="apply-button" type="button">
           Confirm and apply
+        </button>
+      </div>
+    </dialog>
+
+    <dialog id="cleanup-confirm" class="apply-modal" aria-labelledby="cleanup-heading">
+      <div class="guide-heading">
+        <div>
+          <p class="eyebrow">Permanent cleanup</p>
+          <h2 id="cleanup-heading">Delete disabled mods?</h2>
+        </div>
+        <button id="close-cleanup" class="modal-close" type="button" aria-label="Close cleanup">
+          &times;
+        </button>
+      </div>
+      <div id="cleanup-content" class="apply-content"></div>
+      <div class="guide-footer">
+        <button id="cancel-cleanup" class="secondary-button" type="button">Cancel</button>
+        <button id="confirm-cleanup" class="danger-button" type="button" disabled>
+          Permanently delete
         </button>
       </div>
     </dialog>

@@ -17,8 +17,11 @@ const proposedActions = document.querySelector("#proposed-actions");
 const actionCount = document.querySelector("#action-count");
 const actionList = document.querySelector("#action-list");
 const actionsNote = document.querySelector("#actions-note");
+const selectAllLabel = document.querySelector("#select-all-label");
+const selectAllActions = document.querySelector("#select-all-actions");
 const openGuideButton = document.querySelector("#open-guide");
 const applyActionsButton = document.querySelector("#apply-actions");
+const deleteDisabledButton = document.querySelector("#delete-disabled");
 const applyGuide = document.querySelector("#apply-guide");
 const closeGuideButton = document.querySelector("#close-guide");
 const guideTabs = document.querySelector("#guide-tabs");
@@ -31,6 +34,11 @@ const applyContent = document.querySelector("#apply-content");
 const closeApplyButton = document.querySelector("#close-apply");
 const cancelApplyButton = document.querySelector("#cancel-apply");
 const confirmApplyButton = document.querySelector("#confirm-apply");
+const cleanupConfirm = document.querySelector("#cleanup-confirm");
+const cleanupContent = document.querySelector("#cleanup-content");
+const closeCleanupButton = document.querySelector("#close-cleanup");
+const cancelCleanupButton = document.querySelector("#cancel-cleanup");
+const confirmCleanupButton = document.querySelector("#confirm-cleanup");
 
 const supportsDirectoryHandles = "showDirectoryPicker" in window;
 const supportsFileHashing = typeof globalThis.crypto?.subtle?.digest === "function";
@@ -44,6 +52,7 @@ let guideActions = [];
 let currentModsDirectoryHandle = null;
 let directActions = [];
 let applyingChanges = false;
+let cleanupInProgress = false;
 
 supportMessage.textContent = !supportsFileHashing
   ? "SHA-512 verification requires HTTPS or localhost in this browser."
@@ -112,7 +121,9 @@ directoryPicker.addEventListener("dragleave", handleDragLeave);
 directoryPicker.addEventListener("drop", handleDrop);
 actionList.addEventListener("change", updateApplyActionsButton);
 actionList.addEventListener("input", updateApplyActionsButton);
+selectAllActions.addEventListener("input", toggleAllActions);
 applyActionsButton.addEventListener("click", openDirectApplyReview);
+deleteDisabledButton.addEventListener("click", openDisabledModsCleanup);
 openGuideButton.addEventListener("click", openApplyGuide);
 closeGuideButton.addEventListener("click", () => applyGuide.close());
 applyGuide.addEventListener("click", (event) => {
@@ -132,6 +143,19 @@ applyConfirm.addEventListener("cancel", (event) => {
 applyConfirm.addEventListener("click", (event) => {
   if (event.target === applyConfirm && !applyingChanges) {
     applyConfirm.close();
+  }
+});
+closeCleanupButton.addEventListener("click", () => cleanupConfirm.close());
+cancelCleanupButton.addEventListener("click", () => cleanupConfirm.close());
+confirmCleanupButton.addEventListener("click", deleteDisabledMods);
+cleanupConfirm.addEventListener("click", (event) => {
+  if (event.target === cleanupConfirm && !cleanupInProgress) {
+    cleanupConfirm.close();
+  }
+});
+cleanupConfirm.addEventListener("cancel", (event) => {
+  if (cleanupInProgress) {
+    event.preventDefault();
   }
 });
 
@@ -568,6 +592,10 @@ function updateApplyActionsButton() {
   const hasSelectedAction = selectedCount > 0;
   const canApplyDirectly = supportsDirectoryHandles && currentModsDirectoryHandle;
   actionCount.textContent = `${selectedCount.toLocaleString()}/${displayedActions.length.toLocaleString()} selected`;
+  selectAllLabel.hidden = displayedActions.length === 0;
+  selectAllActions.disabled = displayedActions.length === 0;
+  selectAllActions.checked = displayedActions.length > 0 && selectedCount === displayedActions.length;
+  selectAllActions.indeterminate = selectedCount > 0 && selectedCount < displayedActions.length;
   applyActionsButton.disabled = !canApplyDirectly || !hasSelectedAction;
   openGuideButton.disabled = !hasSelectedAction;
   openGuideButton.title = hasSelectedAction ? "" : "Select at least one proposed action.";
@@ -579,7 +607,22 @@ function updateApplyActionsButton() {
         ? ""
         : "Select at least one proposed action.";
 
-  if (!hasSelectedAction) {
+  const disabledMods = disabledModFiles();
+  const canDeleteDisabled = supportsDirectoryHandles && currentModsDirectoryHandle;
+  deleteDisabledButton.hidden = displayedActions.length > 0 || disabledMods.length === 0;
+  deleteDisabledButton.disabled = !canDeleteDisabled;
+  deleteDisabledButton.textContent = `Delete ${disabledMods.length.toLocaleString()} disabled mod${disabledMods.length === 1 ? "" : "s"}`;
+  deleteDisabledButton.title = canDeleteDisabled
+    ? ""
+    : "Reopen this folder with Choose folder to grant direct cleanup access.";
+
+  if (displayedActions.length === 0 && disabledMods.length > 0) {
+    actionsNote.textContent = canDeleteDisabled
+      ? "No corrective actions remain. Disabled mods can be permanently removed after you verify the pack launches successfully."
+      : "No corrective actions remain. Reopen this folder with Choose folder to remove disabled mods after a successful launch.";
+  } else if (displayedActions.length === 0) {
+    actionsNote.textContent = "No corrective actions remain.";
+  } else if (!hasSelectedAction) {
     actionsNote.textContent = "Select one or more actions to enable the apply options.";
   } else if (!supportsDirectoryHandles) {
     actionsNote.textContent =
@@ -590,6 +633,118 @@ function updateApplyActionsButton() {
   } else {
     actionsNote.textContent =
       "The guide and direct update are ready. Nothing changes until you review and confirm.";
+  }
+}
+
+function toggleAllActions() {
+  for (const checkbox of actionList.querySelectorAll('input[name="proposed-action"]')) {
+    checkbox.checked = selectAllActions.checked;
+  }
+  updateApplyActionsButton();
+}
+
+function disabledModFiles() {
+  return displayedFiles.filter((file) => {
+    const normalized = file.path.replaceAll("\\", "/").toLowerCase();
+    return normalized.endsWith(".jar.disabled") && !normalized.includes("/");
+  });
+}
+
+function openDisabledModsCleanup() {
+  const disabledMods = disabledModFiles();
+  if (displayedActions.length > 0 || disabledMods.length === 0 || !currentModsDirectoryHandle) {
+    updateApplyActionsButton();
+    return;
+  }
+
+  const warning = document.createElement("p");
+  warning.className = "apply-warning cleanup-warning";
+  warning.textContent =
+    "Only use this cleanup after Minecraft has launched successfully with the updated pack. Deletion is permanent and removes the rollback copies created by disabling these mods.";
+  const list = document.createElement("ul");
+  list.className = "cleanup-file-list";
+  for (const file of disabledMods) {
+    const item = document.createElement("li");
+    const code = document.createElement("code");
+    code.textContent = file.path;
+    item.append(code);
+    list.append(item);
+  }
+  const acknowledgement = document.createElement("label");
+  acknowledgement.className = "cleanup-acknowledgement";
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  const text = document.createElement("span");
+  text.textContent = "I successfully launched Minecraft and no longer need these disabled mods.";
+  checkbox.addEventListener("input", () => {
+    confirmCleanupButton.disabled = !checkbox.checked;
+  });
+  acknowledgement.append(checkbox, text);
+  cleanupContent.replaceChildren(warning, list, acknowledgement);
+  cleanupInProgress = false;
+  closeCleanupButton.hidden = false;
+  cancelCleanupButton.hidden = false;
+  confirmCleanupButton.hidden = false;
+  confirmCleanupButton.disabled = true;
+  confirmCleanupButton.textContent = "Permanently delete";
+  confirmCleanupButton.onclick = null;
+  cleanupConfirm.showModal();
+}
+
+async function deleteDisabledMods() {
+  const disabledMods = disabledModFiles();
+  if (
+    cleanupInProgress ||
+    displayedActions.length > 0 ||
+    disabledMods.length === 0 ||
+    !currentModsDirectoryHandle
+  ) {
+    return;
+  }
+
+  cleanupInProgress = true;
+  closeCleanupButton.hidden = true;
+  cancelCleanupButton.hidden = true;
+  confirmCleanupButton.hidden = true;
+  const progress = createApplyProgress(disabledMods.length);
+  cleanupContent.replaceChildren(progress.container);
+
+  try {
+    progress.update("Requesting write permission…", 0);
+    const permission = await requestWritePermission(currentModsDirectoryHandle);
+    if (permission !== "granted") {
+      throw new Error("Write permission was not granted.");
+    }
+    for (const [index, file] of disabledMods.entries()) {
+      progress.update(`Deleting ${file.path}…`, index);
+      await currentModsDirectoryHandle.getFileHandle(file.path);
+      await currentModsDirectoryHandle.removeEntry(file.path);
+      progress.update(`Deleted ${file.path}`, index + 1);
+    }
+
+    const refreshedFiles = await readDirectoryHandle(currentModsDirectoryHandle);
+    await compareAndShow("mods", refreshedFiles);
+    cleanupContent.replaceChildren(
+      createApplyMessage(
+        `${disabledMods.length} disabled mod${disabledMods.length === 1 ? " was" : "s were"} permanently deleted.`,
+      ),
+    );
+    cleanupInProgress = false;
+    confirmCleanupButton.hidden = false;
+    confirmCleanupButton.disabled = false;
+    confirmCleanupButton.textContent = "Done";
+    confirmCleanupButton.onclick = () => {
+      confirmCleanupButton.onclick = null;
+      cleanupConfirm.close();
+    };
+  } catch (error) {
+    console.error(error);
+    cleanupInProgress = false;
+    closeCleanupButton.hidden = false;
+    cancelCleanupButton.hidden = false;
+    cleanupContent.replaceChildren(
+      createApplyMessage(`Could not finish cleanup: ${error.message ?? "unknown error"}`, true),
+    );
   }
 }
 

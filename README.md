@@ -27,6 +27,9 @@ recheck scanned files before mutation, and back up replaced JARs under
 workflow. Chrome Safe Browsing or an organization-managed DLP policy may block
 File System Access writes after permission is granted; when that happens, the
 client preserves the selection and offers the generated local apply script.
+After all corrective actions are complete, Chromium users may permanently
+delete root-level `.jar.disabled` files through a separate confirmation that is
+intended only after the updated pack has launched successfully.
 
 The hosted prototype is available at
 [yurei-dll.github.io/smp-client](https://yurei-dll.github.io/smp-client/).
