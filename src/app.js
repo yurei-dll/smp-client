@@ -16,6 +16,7 @@ const fileList = document.querySelector("#file-list");
 const proposedActions = document.querySelector("#proposed-actions");
 const actionCount = document.querySelector("#action-count");
 const actionList = document.querySelector("#action-list");
+const actionsNote = document.querySelector("#actions-note");
 const openGuideButton = document.querySelector("#open-guide");
 const applyActionsButton = document.querySelector("#apply-actions");
 const applyGuide = document.querySelector("#apply-guide");
@@ -110,6 +111,7 @@ directoryPicker.addEventListener("dragover", handleDragOver);
 directoryPicker.addEventListener("dragleave", handleDragLeave);
 directoryPicker.addEventListener("drop", handleDrop);
 actionList.addEventListener("change", updateApplyActionsButton);
+actionList.addEventListener("input", updateApplyActionsButton);
 applyActionsButton.addEventListener("click", openDirectApplyReview);
 openGuideButton.addEventListener("click", openApplyGuide);
 closeGuideButton.addEventListener("click", () => applyGuide.close());
@@ -573,6 +575,19 @@ function updateApplyActionsButton() {
       : hasSelectedAction
         ? ""
         : "Select at least one proposed action.";
+
+  if (!hasSelectedAction) {
+    actionsNote.textContent = "Select one or more actions to enable the apply options.";
+  } else if (!supportsDirectoryHandles) {
+    actionsNote.textContent =
+      "The guide is ready. Direct changes require Chrome or another Chromium-based browser over HTTPS or localhost.";
+  } else if (!currentModsDirectoryHandle) {
+    actionsNote.textContent =
+      "The guide is ready. To apply directly, reopen this folder with Choose folder; drag-and-drop and upload access are read-only.";
+  } else {
+    actionsNote.textContent =
+      "The guide and direct update are ready. Nothing changes until you review and confirm.";
+  }
 }
 
 function selectedActions() {
@@ -598,6 +613,7 @@ function createActionItem(action, index) {
   checkbox.id = `proposed-action-${index}`;
   checkbox.dataset.actionIndex = index;
   checkbox.checked = false;
+  checkbox.addEventListener("input", updateApplyActionsButton);
 
   body.className = "action-body";
   heading.className = "action-title";
