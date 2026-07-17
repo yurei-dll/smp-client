@@ -21,6 +21,10 @@ is unchecked by default. Checked actions can be opened in an OS-specific manual
 guide or exported as a generated Bash or PowerShell script. The website itself
 does not write to the directory.
 
+The hosted prototype is available at
+[yurei-dll.github.io/smp-client](https://yurei-dll.github.io/smp-client/).
+Pushes to `main` run the test suite and deploy `src/` to GitHub Pages.
+
 Serve the repository over localhost and open the printed URL:
 
 ```bash
