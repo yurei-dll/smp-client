@@ -49,6 +49,7 @@ let collapsedGroups = new Set();
 let initializedGroups = new Set();
 let guideOperatingSystem = detectOperatingSystem();
 let guideActions = [];
+let guideRefreshInProgress = false;
 let currentModsDirectoryHandle = null;
 let directActions = [];
 let applyingChanges = false;
@@ -131,6 +132,7 @@ applyGuide.addEventListener("click", (event) => {
     applyGuide.close();
   }
 });
+applyGuide.addEventListener("close", refreshAfterApplyGuide);
 downloadScriptButton.addEventListener("click", downloadGuideScript);
 closeApplyButton.addEventListener("click", closeDirectApply);
 cancelApplyButton.addEventListener("click", closeDirectApply);
@@ -911,6 +913,35 @@ function createApplyMessage(message, isError = false) {
   return paragraph;
 }
 
+async function refreshAfterApplyGuide() {
+  if (guideRefreshInProgress) {
+    return;
+  }
+  if (!currentModsDirectoryHandle) {
+    status.textContent =
+      "The guide was closed. Reopen the folder to refresh changes made from a read-only upload or drop session.";
+    return;
+  }
+
+  guideRefreshInProgress = true;
+  chooseButton.disabled = true;
+  packProfile.disabled = true;
+  status.classList.remove("error");
+  status.textContent = "Refreshing the mods folder after the apply guide…";
+  try {
+    const refreshedFiles = await readDirectoryHandle(currentModsDirectoryHandle);
+    await compareAndShow("mods", refreshedFiles);
+  } catch (error) {
+    console.error(error);
+    chooseButton.disabled = false;
+    packProfile.disabled = false;
+    status.classList.add("error");
+    status.textContent = `Could not refresh the mods folder: ${error.message ?? "unknown error"}`;
+  } finally {
+    guideRefreshInProgress = false;
+  }
+}
+
 function setApplyControls({ busy = false, confirmDisabled = false } = {}) {
   applyingChanges = busy;
   closeApplyButton.hidden = busy;
@@ -1379,6 +1410,15 @@ function renderGuide() {
       ? "Open PowerShell in your mods folder, then run each selected command."
       : "Open a terminal in your mods folder, then run each selected command.";
 
+  const contents = [intro];
+  if (guideOperatingSystem === "linux") {
+    const permissionWarning = document.createElement("p");
+    permissionWarning.className = "guide-message guide-permission-warning";
+    permissionWarning.textContent =
+      "Browsers cannot preserve Unix executable permissions on downloads. Run `chmod +x apply-smp-changes.sh` once, or launch it directly with `bash apply-smp-changes.sh`.";
+    contents.push(permissionWarning);
+  }
+
   const list = document.createElement("ol");
   list.className = "guide-command-list";
   for (const action of guideActions) {
@@ -1390,10 +1430,12 @@ function renderGuide() {
     item.append(title, command);
     list.append(item);
   }
-  guideContent.replaceChildren(intro, list);
-  downloadScriptButton.textContent = `Download generated ${
-    guideOperatingSystem === "windows" ? "PowerShell" : "shell"
-  } script`;
+  contents.push(list);
+  guideContent.replaceChildren(...contents);
+  downloadScriptButton.textContent =
+    guideOperatingSystem === "windows"
+      ? "Download generated PowerShell script"
+      : "Download shell script (chmod required)";
 }
 
 function createGuideMessage(message, isError = false) {
@@ -1468,6 +1510,9 @@ function downloadGuideScript() {
 function createShellScript(actions) {
   const lines = [
     "#!/usr/bin/env bash",
+    "# Browser downloads do not retain Unix executable bits.",
+    "# Run: chmod +x apply-smp-changes.sh && ./apply-smp-changes.sh",
+    "# Or:  bash apply-smp-changes.sh",
     "set -euo pipefail",
     "MODS_DIR=${1:-}",
     'if [[ -z "$MODS_DIR" ]]; then read -r -p "Path to mods folder: " MODS_DIR; fi',

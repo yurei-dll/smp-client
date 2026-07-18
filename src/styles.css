@@ -803,6 +803,14 @@ tbody tr:last-child td {
   color: #ffaaa1;
 }
 
+.guide-permission-warning {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #715d2d;
+  border-radius: 0.4rem;
+  color: #f6d790;
+  background: #2b2415;
+}
+
 .guide-command-list {
   display: grid;
   gap: 0.85rem;
