@@ -35,6 +35,9 @@ intended only after the updated pack has launched successfully.
 The hosted prototype is available at
 [yurei-dll.github.io/smp-client](https://yurei-dll.github.io/smp-client/).
 Pushes to `main` run the test suite and deploy `src/` to GitHub Pages.
+First-time page use is introduced by an in-app overview of the local scan,
+review, browser-specific apply paths, and safety model; it closes automatically
+when a valid folder scan begins.
 
 Serve the repository over localhost and open the printed URL:
 

@@ -570,6 +570,225 @@ tbody tr:last-child td {
   background: #101d16;
 }
 
+.welcome-modal {
+  width: min(68rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  padding: 0;
+  overflow: auto;
+  border: 1px solid #5f8f6c;
+  border-radius: 0.85rem;
+  color: #ecf4ee;
+  background: #101d16;
+  box-shadow: 0 2rem 7rem rgb(0 0 0 / 62%);
+}
+
+.welcome-close {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.7rem;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  padding: 0;
+  border: 1px solid #496052;
+  border-radius: 50%;
+  color: #b9c7bd;
+  background: rgb(16 29 22 / 82%);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.welcome-close:hover {
+  border-color: #76d497;
+  color: #fff;
+  background: #1d3626;
+}
+
+.welcome-modal::backdrop {
+  background: rgb(2 7 4 / 82%);
+  backdrop-filter: blur(0.35rem);
+}
+
+body.dragging .welcome-modal {
+  border-color: #83e3a4;
+  box-shadow: 0 0 0 0.25rem rgb(131 227 164 / 20%), 0 2rem 7rem rgb(0 0 0 / 62%);
+}
+
+body.dragging .welcome-footer {
+  background: #1a3825;
+}
+
+.welcome-hero,
+.welcome-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.15rem 1.25rem;
+  background: #14251b;
+}
+
+.welcome-hero {
+  padding-right: 3.4rem;
+  border-bottom: 1px solid #365640;
+}
+
+.welcome-hero h2 {
+  margin-bottom: 0.45rem;
+  font-size: clamp(1.45rem, 3vw, 2.25rem);
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+}
+
+.welcome-summary {
+  max-width: 48rem;
+  margin-bottom: 0;
+  color: #b8c7bd;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.welcome-local-badge {
+  flex: 0 0 auto;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid #4d8b60;
+  border-radius: 999px;
+  color: #b8f4ca;
+  background: #173522;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.welcome-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.65fr);
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+}
+
+.welcome-section,
+.welcome-safety {
+  min-width: 0;
+}
+
+.welcome-section h3,
+.welcome-safety h3 {
+  margin: 0 0 0.8rem;
+  font-size: 1rem;
+}
+
+.welcome-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.welcome-steps li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.6rem;
+  padding: 0.7rem;
+  border: 1px solid #294234;
+  border-radius: 0.55rem;
+  background: #0d1912;
+}
+
+.welcome-step-number {
+  display: grid;
+  place-items: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  border: 1px solid #4d8b60;
+  border-radius: 50%;
+  color: #b8f4ca;
+  background: #173522;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.welcome-steps strong,
+.welcome-browser-note strong {
+  font-size: 0.78rem;
+}
+
+.welcome-steps p,
+.welcome-safety li,
+.welcome-browser-note p,
+.welcome-footer p {
+  color: #9cac9f;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.welcome-steps p,
+.welcome-browser-note p,
+.welcome-footer p {
+  margin: 0.2rem 0 0;
+}
+
+.welcome-steps code {
+  color: #c9f5d7;
+}
+
+.welcome-safety {
+  padding: 0.8rem;
+  border: 1px solid #365640;
+  border-radius: 0.55rem;
+  background: #14251b;
+}
+
+.welcome-safety ul {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding-left: 1.15rem;
+}
+
+.welcome-safety li::marker {
+  color: #76d497;
+}
+
+.welcome-browser-note {
+  margin-top: 0.8rem;
+  padding: 0.65rem;
+  border: 1px solid #4b5d50;
+  border-radius: 0.45rem;
+  background: #101d16;
+}
+
+.welcome-footer {
+  border-top: 1px solid #365640;
+}
+
+.welcome-footer p {
+  margin: 0;
+}
+
+.welcome-start-button {
+  flex: 0 0 auto;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid #70cd8e;
+  border-radius: 0.5rem;
+  color: #092011;
+  background: #83e3a4;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.welcome-start-button:hover {
+  background: #a0edb9;
+}
+
 .apply-modal {
   width: min(46rem, calc(100% - 2rem));
   max-height: calc(100vh - 2rem);
@@ -880,6 +1099,11 @@ body.dragging .drop-overlay {
     height: auto;
     max-height: min(36rem, calc(100dvh - 8rem));
   }
+
+  .welcome-content,
+  .welcome-steps {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 38rem) {
@@ -914,5 +1138,15 @@ body.dragging .drop-overlay {
   .action-kind {
     grid-column: 2;
     justify-self: start;
+  }
+
+  .welcome-hero,
+  .welcome-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .welcome-start-button {
+    width: 100%;
   }
 }

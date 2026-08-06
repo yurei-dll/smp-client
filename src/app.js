@@ -39,6 +39,9 @@ const cleanupContent = document.querySelector("#cleanup-content");
 const closeCleanupButton = document.querySelector("#close-cleanup");
 const cancelCleanupButton = document.querySelector("#cancel-cleanup");
 const confirmCleanupButton = document.querySelector("#confirm-cleanup");
+const welcomeModal = document.querySelector("#welcome-modal");
+const welcomeChooseButton = document.querySelector("#welcome-choose-directory");
+const closeWelcomeButton = document.querySelector("#close-welcome");
 
 const supportsDirectoryHandles = "showDirectoryPicker" in window;
 const supportsFileHashing = typeof globalThis.crypto?.subtle?.digest === "function";
@@ -61,7 +64,14 @@ supportMessage.textContent = !supportsFileHashing
     ? "This browser can apply reviewed changes after you grant folder access."
     : "This browser will use a directory upload picker. Files stay on this device.";
 
-chooseButton.addEventListener("click", async () => {
+welcomeModal.showModal();
+
+chooseButton.addEventListener("click", chooseDirectory);
+welcomeChooseButton.addEventListener("click", chooseDirectory);
+closeWelcomeButton.addEventListener("click", () => welcomeModal.close());
+welcomeModal.addEventListener("cancel", (event) => event.preventDefault());
+
+async function chooseDirectory() {
   if (!supportsDirectoryHandles) {
     directoryInput.value = "";
     directoryInput.click();
@@ -78,7 +88,7 @@ chooseButton.addEventListener("click", async () => {
   } catch (error) {
     handlePickerError(error);
   }
-});
+}
 
 packProfile.addEventListener("change", async () => {
   manifestPromise = undefined;
@@ -358,6 +368,9 @@ function entryFile(entry) {
 }
 
 function beginRead(directoryName) {
+  if (welcomeModal.open) {
+    welcomeModal.close();
+  }
   chooseButton.disabled = true;
   packProfile.disabled = true;
   results.hidden = true;

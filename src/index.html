@@ -110,14 +110,118 @@
   <footer class="site-footer">
     <a href="https://yurei-dll.github.io/yurei-dll/">Yūrei.dll</a>
     <span aria-hidden="true">·</span>
-    <span>Code: MIT License · Copyright &copy; 2026 Yūrei.dll</span>
+    <a href="https://raw.githubusercontent.com/yurei-dll/smp-client/refs/heads/main/LICENSE">
+      Code: MIT License
+    </a>
     <span aria-hidden="true">·</span>
     <a href="https://mineblocks.com/1/wiki/index.php?title=File:Dirt.png">
       Dirt texture: Mine Blocks by Zanzlanz
     </a>
+    <span aria-hidden="true">·</span>
+    <span>Not endorsed by, associated with, or affiliated with Mojang Studios or Microsoft.</span>
   </footer>
 
   <div class="drop-overlay" aria-hidden="true">Drop folder to scan</div>
+
+  <dialog id="welcome-modal" class="welcome-modal" aria-labelledby="welcome-heading">
+    <button
+      id="close-welcome"
+      class="welcome-close"
+      type="button"
+      aria-label="Close welcome information"
+    >
+      &times;
+    </button>
+    <div class="welcome-hero">
+      <div>
+        <p class="eyebrow">Welcome to SMP Client</p>
+        <h2 id="welcome-heading">Keep your Minecraft mod folder in sync</h2>
+        <p class="welcome-summary">
+          SMP Client checks the mods already installed in a local Prism or
+          Minecraft instance against the latest published SMP pack. Your files
+          stay on your device, and nothing changes until you review and confirm
+          the proposed actions.
+        </p>
+      </div>
+      <span class="welcome-local-badge">Local-first</span>
+    </div>
+
+    <div class="welcome-content">
+      <section class="welcome-section" aria-labelledby="welcome-how-heading">
+        <p class="eyebrow">How it works</p>
+        <h3 id="welcome-how-heading">From folder to reviewed update</h3>
+        <ol class="welcome-steps">
+          <li>
+            <span class="welcome-step-number">1</span>
+            <div>
+              <strong>Select your instance</strong>
+              <p>
+                Choose or drop <code>mods</code>, <code>.minecraft</code>, or a
+                Prism instance folder. The app finds the actual mods directory.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="welcome-step-number">2</span>
+            <div>
+              <strong>Scan locally</strong>
+              <p>
+                The browser calculates JAR hashes locally and compares them with
+                the selected Standard or Barebones pack catalog.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="welcome-step-number">3</span>
+            <div>
+              <strong>Review every action</strong>
+              <p>
+                Missing, changed, disabled, and unrecognized mods become an
+                explicit checklist. Actions start unchecked.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="welcome-step-number">4</span>
+            <div>
+              <strong>Apply your way</strong>
+              <p>
+                Chromium can apply confirmed changes after write permission.
+                Other browsers receive an exact guide or generated local script.
+              </p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <aside class="welcome-safety" aria-labelledby="welcome-safety-heading">
+        <p class="eyebrow">Safety model</p>
+        <h3 id="welcome-safety-heading">Designed to be reversible</h3>
+        <ul>
+          <li>Files are inspected in your browser, not uploaded.</li>
+          <li>Nothing is selected or applied automatically.</li>
+          <li>Unexpected JARs are disabled instead of immediately deleted.</li>
+          <li>Replaced files are backed up before direct updates finish.</li>
+          <li>Permanent disabled-mod cleanup is a separate confirmation.</li>
+        </ul>
+        <div class="welcome-browser-note">
+          <strong>Browser support</strong>
+          <p>
+            Chrome-family browsers support reviewed direct updates. Firefox and
+            other browsers still provide the full scan, checklist, guide, and
+            script workflow.
+          </p>
+        </div>
+      </aside>
+    </div>
+
+    <div class="welcome-footer">
+      <p>You can also drag a supported folder anywhere onto this page.</p>
+      <button id="welcome-choose-directory" class="welcome-start-button" type="button">
+        Choose a folder to begin
+      </button>
+    </div>
+  </dialog>
 
   <dialog id="apply-guide" class="guide-modal" aria-labelledby="guide-heading">
     <div class="guide-heading">
